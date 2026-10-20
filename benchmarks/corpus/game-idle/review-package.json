@@ -1,0 +1,59 @@
+{
+  "fixture": "game-idle",
+  "title": "挂机矿洞 · v0.3（v2.0 校准语料）",
+  "target": ".",
+  "notes": "由 benchmarks/corpus/generate.mjs 自动生成；4 个既有 fixture + 16 个合成语料共 20 个项目。合成语料含故意注入的种子缺陷，不要用手工修改生成文件（--check 会失败）。",
+  "claims": [
+    "前端不包含任何密钥或第三方凭据",
+    "HP 不会低于 0，生命值变化有完整的下限保护",
+    "战利品循环边界正确，不会访问越界元素",
+    "所有图片资源完整可加载"
+  ],
+  "focus": [
+    "状态机与重开软锁",
+    "数值下限钳制（负 HP）",
+    "循环边界（off-by-one）",
+    "前端密钥",
+    "资源完整性（坏图）",
+    "README 宣称与实现一致性"
+  ],
+  "outOfScope": "玩法趣味性、难度平衡与美术风格偏好不在本轮范围；主观手感不作为缺陷",
+  "environment": "只读文件浏览 + review_probe；无浏览器控制（游戏页面由 Host 按 4 个视口截图）",
+  "timeBudget": "约 10–15 分钟",
+  "shots": [
+    {
+      "path": "index.html",
+      "width": 1440,
+      "height": 900,
+      "name": "desktop"
+    },
+    {
+      "path": "index.html",
+      "width": 1280,
+      "height": 800,
+      "name": "laptop"
+    },
+    {
+      "path": "index.html",
+      "width": 768,
+      "height": 1024,
+      "name": "tablet"
+    },
+    {
+      "path": "index.html",
+      "width": 390,
+      "height": 844,
+      "name": "mobile"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "GA4-1",
+      "GA4-2",
+      "GA4-3",
+      "GA4-4"
+    ]
+  }
+}

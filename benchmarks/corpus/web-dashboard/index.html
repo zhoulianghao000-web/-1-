@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>晴雨表 · 数据看板</title>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="assets/app.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header class="site-header">
+      <img class="logo-img" src="assets/icon.svg" alt="站点图标">
+      <h1>晴雨表 · 数据看板</h1>
+    </header>
+    <main class="panel">
+      <p class="lead">把团队指标放进同一块屏幕。</p>
+      <img class="gallery-image" src="assets/icon.svg" alt="站点插画">
+      <p class="status" id="status" role="status" aria-live="polite">就绪</p>
+      <span id="status" class="hidden-status">重复的状态节点</span>
+      <button type="button" class="btn" id="ping">刷新状态</button>
+    </main>
+    <footer class="site-footer"><p>© 2026 晴雨表 · 演示站点</p></footer>
+  </div>
+</body>
+</html>

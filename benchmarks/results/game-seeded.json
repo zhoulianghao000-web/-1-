@@ -1,0 +1,852 @@
+{
+  "fixture": "game-seeded",
+  "round": {
+    "n": 1,
+    "rubricVersion": "v2-100",
+    "profile": "game",
+    "attack": {
+      "verdict": "BLOCK",
+      "summary": "逐条证伪 5 条宣称：重开、HP 下限、20% 掉落率、存档一致、键盘操作全部不成立，且额外发现前端硬编码 API key 与坏图。最可能失败的路径是「开始游戏 → 连点攻击 15 次 → 点击重开」：game.js:165 调用不存在的 resetGame()，抛 ReferenceError，结束层永久覆盖舞台，只能刷新页面（软锁）。同时任何访客都能从 assets/game.js:15 取走 [REDACTED:openai-key]… 并用 Authorization: Bearer 直连外部 API，属凭据泄露级 BLOCKER。Host manifest 的 consoleError（E1/E3/E4 = 2/2/3）、networkFailure（2/2/4）与 4 张证据卡渲染结果与上述代码缺陷一致；E1 fps=60.31，说明忙循环尚未在本机造成明显掉帧。综合判定 BLOCK。",
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "BLOCKER",
+          "title": "重开按钮调用未定义的 resetGame()，点击抛 ReferenceError 且结束层无法关闭，形成软锁",
+          "evidence": "assets/game.js:164-166 注册 restart 点击并调用 resetGame()；全项目无该函数定义（grep 'resetGame' 仅命中 labels.json 描述与 game.js:165；review_probe check-syntax 只报 checked=1/failures=[]，不含运行时符号检查）。assets/game.js:105-111 gameOver() 禁用攻击并显示 #gameover；assets/game.js:69 把 #start 禁用后再无任何地方恢复；assets/styles.css:290-308 结束层 position:absolute; inset:0; z-index:5 覆盖 stage。",
+          "attack": "打开 index.html → 点击「开始游戏」→ 连续点击「攻击」15 次（100-7×15=-5，assets/game.js:97,100）→ 结束层出现 → 点击「重开」：控制台出现 Uncaught ReferenceError: resetGame is not defined，结束层仍在，下层 #start 已 disabled、#attack 已 disabled，页面只能刷新。Host manifest 中 E3 consoleError=2 与该点击步骤对应。",
+          "impact": "README.md:23「重开完整重置…回到可以继续游玩的状态」不成立；游戏一结束即进入无出口状态，属明确可复现的软锁。",
+          "fix": "实现 resetGame()（重置 state、按钮禁用态、结束层、日志）或删除未定义调用，并保证开始按钮可再次启用。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F2",
+          "severity": "BLOCKER",
+          "title": "前端源码硬编码 API key 并携带 Bearer 直连外部 API",
+          "evidence": "assets/game.js:15 var CLOUD_API_KEY = [REDACTED:assignment]\"; assets/game.js:16 CLOUD_SAVE_URL = \"https://api.lunar-arena.example/v1/saves\"; assets/game.js:125-135 fetch POST 该 URL，assets/game.js:130 'Authorization': 'Bearer ' + CLOUD_API_KEY；assets/game.js:120 每次点击「保存进度」都会调用 pushCloudSave。浏览器端没有任何后端/代理。",
+          "attack": "打开 index.html → DevTools Network 点击「保存进度」即可看到对 api.lunar-arena.example 的 POST 与明文 Authorization 头；或直接查看 assets/game.js:15 复制密钥。Host manifest E1 networkFailure=2、E4 networkFailure=4 也显示这些外呼失败。",
+          "impact": "任何访客都能提取完整密钥并冒用该云服务；同时与 README.md:3、40-43「完全离线、无外部依赖」矛盾，构成未告知的第三方联网。",
+          "fix": "删除前端硬编码凭据与直连云端调用，改为服务端代理；无后端则彻底移除同步功能。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F3",
+          "severity": "MAJOR",
+          "title": "稀有掉落率实现为 50%，与页面/README 公示的 20% 不一致",
+          "evidence": "assets/game.js:12 var RARE_DROP_RATE = 0.5; assets/game.js:92 if (Math.random() < RARE_DROP_RATE)；index.html:43 显示「稀有掉落率：20%」；README.md:18 与 README.md:25 写 20%；另 assets/game.js:13 的 LEGENDARY_DROP_RATE = 0.05 定义后从未被使用。",
+          "attack": "开始游戏后连续点击「攻击」，统计战斗日志（index.html:103，game.js:94）中「获得稀有掉落」的次数：按 0.5 执行约为每 2 次攻击一次，明显高于公示的 20%。",
+          "impact": "公示概率与实现不一致，属抽卡/掉落合规与用户信任问题（rubric 明确该不一致按 BLOCKER/高严重度处理）。",
+          "fix": "把 RARE_DROP_RATE 改为 0.2（或同步修改 UI/README），并删除或接线 LEGENDARY_DROP_RATE。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F4",
+          "severity": "MAJOR",
+          "title": "玩家 HP 相减无下限钳制，第 15 次攻击后为 -5 并显示/写入负血",
+          "evidence": "assets/game.js:97 state.playerHp -= ATTACK_DAMAGE 无 Math.max(0, …)；assets/game.js:100-102 仅在 ≤0 时 gameOver；assets/game.js:109 把 state.playerHp 原值拼进标题；对比 assets/game.js:50 只对敌人 HP 做了 Math.max(0, …) 钳制；assets/game.js:114 保存负 HP。",
+          "attack": "开始游戏后点击「攻击」15 次：HUD 依次 100→93→…→2→-5（#hp 显示 -5），结束层标题为「你被击倒了（HP -5）」；此时保存会写入 hp:-5。E3 证据卡正是 15 次攻击 + 结束截图。",
+          "impact": "README.md:24「生命值变化有完整的下限保护，不会出现负血」不成立；负血量进入 UI 与存档。",
+          "fix": "伤害结算后钳制 state.playerHp = Math.max(0, state.playerHp - ATTACK_DAMAGE)，并据此判定结束。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F5",
+          "severity": "MAJOR",
+          "title": "存档字段 {score,hp} 与读档读取的 points/health 不匹配，读档静默丢失分数并把 HP 重置为 100",
+          "evidence": "assets/game.js:114 savedGame = { score: state.score, hp: state.playerHp }（同时写入 localStorage 'lunar-arena-save'，assets/game.js:116）；assets/game.js:152 state.score = saved.points || 0；assets/game.js:153 state.playerHp = saved.health || MAX_HP。",
+          "attack": "开始游戏 → 攻击若干次使分数 >0、HP <100 → 点击「保存进度」→ 点击「读取进度」：状态栏提示「已读取存档」（assets/game.js:155），但 HUD 变成 0 分/100 HP；刷新页面后从 localStorage 读取同样是 {score,hp}，字段仍然不匹配。",
+          "impact": "README.md:26「保存进度会保留分数与 HP，读取后与保存时一致」不成立，属静默进度丢失。另 loadGame 不恢复 state.started，读档后只能点「开始游戏」，而 startGame（assets/game.js:62-67）会把刚读出的分数/HP 再次清零，README.md:12「下次继续」也不成立。",
+          "fix": "统一写入与读取的字段名并增加存档版本/校验，读档时同时恢复 started 与攻击按钮可用态。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F6",
+          "severity": "MAJOR",
+          "title": "全局 keydown 拦截 Tab 与空格，键盘无法移动焦点或触发按钮",
+          "evidence": "assets/game.js:168-172 对 event.key === 'Tab' 与 ' ' 调用 event.preventDefault()，脚本以 defer 加载（index.html:9），页面加载即生效；页面内无其它焦点管理代码。",
+          "attack": "打开 index.html 直接按 Tab：焦点不移动（被 preventDefault）；即使强行聚焦按钮，按空格也不会触发 click、页面也不滚动；无焦点时按回车无法触发任何按钮，纯键盘用户连「开始游戏」都点不到。",
+          "impact": "README.md:27「Tab 可以依次移动焦点，空格 / 回车可以触发按钮」不成立；核心操作对键盘用户不可达（rubric 记为 MAJOR）。结束层出现时焦点也不迁移、无 role=dialog/aria-modal（index.html:87、assets/game.js:105-111），辅助技术无法感知失败状态。",
+          "fix": "删除全局 Tab/Space 拦截，只在确有需要的游戏热键上局部处理，并为结束层补 dialog 语义与焦点迁移。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F7",
+          "severity": "MAJOR",
+          "title": "传说装备图片 assets/img/legendary.png 不存在，页面出现坏图与网络失败",
+          "evidence": "index.html:97 <img id=\"legendary-img\" class=\"loot-art\" src=\"assets/img/legendary.png\" alt=\"…\">；review_probe list-files 只返回 index.html、README.md、labels.json、review-package.json、assets/game.js、assets/styles.css，无 assets/img 目录；img 无 onerror 兜底。README.md:42-43 称这是项目唯一图片资源。",
+          "attack": "打开 index.html（file://）→ 侧栏「传说装备」位置请求 assets/img/legendary.png → 加载失败并显示 alt 文本占位；Host manifest E1 networkFailure=2、E4 networkFailure=4 与该请求一致。",
+          "impact": "资源缺失导致 4 张证据卡中都存在破图区域，破坏视觉完整性，也让 README 的离线资源说明不成立。",
+          "fix": "补齐 assets/img/legendary.png，或改为内联 SVG/占位图并加 onerror 兜底。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F8",
+          "severity": "MAJOR",
+          "title": "setInterval(heavyPerfWork, 0) 常驻执行 6 万次循环，未随页面隐藏暂停",
+          "evidence": "assets/game.js:174-180 heavyPerfWork() 循环 60000 次写 window.__arenaPerfNoise；assets/game.js:182 setInterval(heavyPerfWork, 0) 在脚本加载时启动，无 clearInterval、无 visibilitychange 处理。",
+          "attack": "打开页面不做任何操作，DevTools Performance 录制数秒可看到密集 Timer Fired 回调；切到后台再回来仍在持续。Host manifest E1 fps=60.31，说明本机尚未出现明显掉帧，但该循环从首帧起持续占用主线程时间片。",
+          "impact": "常驻 CPU/电量消耗，低端设备与移动端掉帧风险；本机 fps 未塌陷，故卡顿幅度未量化。",
+          "fix": "删除该忙循环，或至少改用 rAF 节流并在 visibilitychange 时暂停/清理。",
+          "confidence": "high",
+          "verified": true
+        }
+      ],
+      "solid": [
+        "入口引用齐全：index.html:8-9 引用的 assets/styles.css 与 assets/game.js 均存在（review_probe list-files 返回 6 个文件，无死链脚本/样式）。",
+        "语法检查通过：review_probe check-syntax 返回 {\"checked\":1,\"failures\":[],\"timedOut\":false}。",
+        "无外部 CDN/字体依赖：index.html 无外链 script/link/字体，styles.css:21 使用系统字体栈。",
+        "日志渲染使用 textContent（assets/game.js:36-37），未发现通过战斗日志注入 HTML 的路径。",
+        "敌人血条具备 aria-label/aria-valuemin/aria-valuemax 并在 updateHud 中同步 aria-valuenow（index.html:71、assets/game.js:50-54）。",
+        "页面可在 file:// 下完成 4 张 1440×900 证据卡渲染且 E1 fps=60.31，说明首帧非空白、基础样式生效（依据 Host manifest）。",
+        "「开始游戏」按钮逻辑对重复点击有 started 守卫（assets/game.js:58-60），开始流程本身不重复初始化。"
+      ],
+      "unverified": [
+        {
+          "item": "4 张证据代表图的像素级视觉（坏图外观、结束层遮挡、after-restart 帧是否仍被覆盖层占据、整体布局/对比度）",
+          "needs": "证据图片的可读绝对路径或把 4 张图片直接注入对话；当前环境对 workspace/AppData 的 glob 与 read 均被「只能读取被评审项目目录（以及本轮证据目录）」拒绝，无法自行定位证据目录。"
+        },
+        {
+          "item": "console 报错与网络失败的原始文本/URL（manifest 仅给计数：E1 2/2、E3 2/2、E4 3/4）",
+          "needs": "evidence runner 的 console/network 原始日志（或 manifest 中的详细条目）。"
+        },
+        {
+          "item": "稀有掉落的实际频率统计（0.5 vs 0.2 的采样验证）",
+          "needs": "自动化采样点击并统计日志，或 runner 提供 random 分布记录；代码常量本身已足以证明不一致。"
+        },
+        {
+          "item": "localStorage 在隐私模式/配额超限/损坏 JSON 下的降级行为",
+          "needs": "在受限浏览器环境中实测；当前只有 assets/game.js:115-119、141-146 的 try/catch 代码判断。"
+        },
+        {
+          "item": "移动端/触屏 390px 视口与响应式布局",
+          "needs": "4 张证据卡均为 1440×900，需补 mobile 视口截图或真机验证（styles.css:399-431 有断点但无运行证据）。"
+        },
+        {
+          "item": "传说装备「击败 100 只后掉落」是否属缺陷",
+          "needs": "README.md:19 标注「演示数值，当前版本仅展示」，而 assets/game.js:13 的 LEGENDARY_DROP_RATE 未接线；需产品确认该功能的预期状态。"
+        }
+      ],
+      "nextSteps": "1. 立刻移除 assets/game.js:15-16 的前端密钥与 :125-135 的直连 fetch（未告知的外呼与凭据泄露，最高优先级）。2. 实现 resetGame() 并完整重置 state/按钮/结束层/日志，补键盘可达的结束态焦点管理，消除重开软锁。3. HP 结算改为 Math.max(0, …)；RARE_DROP_RATE 调成 0.2 或同步修改 UI/README。4. 统一存档写入/读取字段（score/hp 对齐）并加版本校验，读档时恢复 started 与攻击按钮，避免读档被「开始游戏」清零。5. 删除全局 Tab/Space preventDefault 与 setInterval(heavyPerfWork, 0)，补齐 assets/img/legendary.png，然后重跑 4 张证据卡（含 mobile 视口）复评。"
+    },
+    "score": {
+      "score": 60,
+      "rawScore": 60,
+      "verdict": "HOLD",
+      "findingsCount": 8,
+      "supportedCount": 8,
+      "validFindings": [
+        {
+          "title": "重开按钮调用未定义的 resetGame()，点击抛 ReferenceError 且结束层无法关闭，形成软锁",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "assets/game.js:164-166（调用在 :165）无 resetGame 定义；assets/game.js:69 与 :107 分别禁用 #start/#attack，assets/styles.css:290-306 的结束层 position:absolute/inset:0/z-index:5 仍覆盖舞台，点击后 ReferenceError 使 overlay 无法关闭，软锁成立。E3 的 20 步包含 restart 点击，Host consoleError=2 与之一致（原始报错文本未提供）。"
+        },
+        {
+          "title": "前端源码硬编码 API key 并携带 Bearer 直连外部 API",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "assets/game.js:15 存在明文 CLOUD_API_KEY、:16 为外部 CLOUD_SAVE_URL、:126-135 的 fetch 携带 Authorization: Bearer；index.html 无后端/代理，README.md:3 宣称完全离线。凭据暴露成立；目标域为 .example，'冒用云服务'无法实证，但不影响硬编码凭据的阻断性质。"
+        },
+        {
+          "title": "稀有掉落率实现为 50%，与页面/README 公示的 20% 不一致",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "assets/game.js:12 RARE_DROP_RATE=0.5 且 :92 使用；index.html:43 与 README.md:18/25 公示 20%；:13 的 LEGENDARY_DROP_RATE 定义后未接线。不一致成立；Host game rubric 将概率公示不一致列为 BLOCKER，红队标 MAJOR 偏保守，但不影响本轮门控。"
+        },
+        {
+          "title": "玩家 HP 相减无下限钳制，第 15 次攻击后为 -5 并显示/写入负血",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/game.js:97 playerHp -= ATTACK_DAMAGE 无 Math.max；:50 只对敌人 HP 做了钳制；:109 把原值拼进结束标题；15 次攻击后 HP=-5 并可在 :114-116 写入存档。E3 的 15 次攻击步骤与 gameover 帧对应。"
+        },
+        {
+          "title": "存档字段 {score,hp} 与读档读取的 points/health 不匹配，读档静默丢失分数并把 HP 重置为 100",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/game.js:114 保存 {score,hp}，:152-153 却读取 saved.points/saved.health，读档静默变为 0/100；:138-155 不恢复 state.started，刷新后 #attack 仍 disabled。E4 在默认 0/100 下存读、未展示可见后果，但源码路径足以确认字段错配。"
+        },
+        {
+          "title": "全局 keydown 拦截 Tab 与空格，键盘无法移动焦点或触发按钮",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/game.js:168-172 对 Tab 与空格调用 preventDefault；index.html:9 脚本 defer 加载即生效；index.html:87-90 结束层无 role=dialog/aria-modal，焦点也不迁移。核心键盘操作不可达成立。"
+        },
+        {
+          "title": "传说装备图片 assets/img/legendary.png 不存在，页面出现坏图与网络失败",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:97 引用 assets/img/legendary.png；review_probe list-files 仅返回 6 个文件、无 assets/img 目录，且 img 无 onerror 兜底；Host E1/E4 networkFailure=2/4 与资源失败相符（原始失败 URL 未提供）。"
+        },
+        {
+          "title": "setInterval(heavyPerfWork, 0) 常驻执行 6 万次循环，未随页面隐藏暂停",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/game.js:174-182 heavyPerfWork 执行 6 万次循环并被 setInterval(...,0) 常驻启动，无 clearInterval、无 visibilitychange 暂停；代码成立。但 Host E1 fps=60.31，报告自述'卡顿幅度未量化'，MAJOR 对应的'明显卡顿'影响证据不足。"
+        }
+      ],
+      "blockingFindings": [
+        {
+          "title": "重开按钮调用未定义的 resetGame()，点击抛 ReferenceError 且结束层无法关闭，形成软锁",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "assets/game.js:164-166（调用在 :165）无 resetGame 定义；assets/game.js:69 与 :107 分别禁用 #start/#attack，assets/styles.css:290-306 的结束层 position:absolute/inset:0/z-index:5 仍覆盖舞台，点击后 ReferenceError 使 overlay 无法关闭，软锁成立。E3 的 20 步包含 restart 点击，Host consoleError=2 与之一致（原始报错文本未提供）。"
+        },
+        {
+          "title": "前端源码硬编码 API key 并携带 Bearer 直连外部 API",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "assets/game.js:15 存在明文 CLOUD_API_KEY、:16 为外部 CLOUD_SAVE_URL、:126-135 的 fetch 携带 Authorization: Bearer；index.html 无后端/代理，README.md:3 宣称完全离线。凭据暴露成立；目标域为 .example，'冒用云服务'无法实证，但不影响硬编码凭据的阻断性质。"
+        },
+        {
+          "title": "稀有掉落率实现为 50%，与页面/README 公示的 20% 不一致",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "assets/game.js:12 RARE_DROP_RATE=0.5 且 :92 使用；index.html:43 与 README.md:18/25 公示 20%；:13 的 LEGENDARY_DROP_RATE 定义后未接线。不一致成立；Host game rubric 将概率公示不一致列为 BLOCKER，红队标 MAJOR 偏保守，但不影响本轮门控。"
+        },
+        {
+          "title": "玩家 HP 相减无下限钳制，第 15 次攻击后为 -5 并显示/写入负血",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/game.js:97 playerHp -= ATTACK_DAMAGE 无 Math.max；:50 只对敌人 HP 做了钳制；:109 把原值拼进结束标题；15 次攻击后 HP=-5 并可在 :114-116 写入存档。E3 的 15 次攻击步骤与 gameover 帧对应。"
+        },
+        {
+          "title": "存档字段 {score,hp} 与读档读取的 points/health 不匹配，读档静默丢失分数并把 HP 重置为 100",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/game.js:114 保存 {score,hp}，:152-153 却读取 saved.points/saved.health，读档静默变为 0/100；:138-155 不恢复 state.started，刷新后 #attack 仍 disabled。E4 在默认 0/100 下存读、未展示可见后果，但源码路径足以确认字段错配。"
+        },
+        {
+          "title": "全局 keydown 拦截 Tab 与空格，键盘无法移动焦点或触发按钮",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/game.js:168-172 对 Tab 与空格调用 preventDefault；index.html:9 脚本 defer 加载即生效；index.html:87-90 结束层无 role=dialog/aria-modal，焦点也不迁移。核心键盘操作不可达成立。"
+        },
+        {
+          "title": "传说装备图片 assets/img/legendary.png 不存在，页面出现坏图与网络失败",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:97 引用 assets/img/legendary.png；review_probe list-files 仅返回 6 个文件、无 assets/img 目录，且 img 无 onerror 兜底；Host E1/E4 networkFailure=2/4 与资源失败相符（原始失败 URL 未提供）。"
+        },
+        {
+          "title": "setInterval(heavyPerfWork, 0) 常驻执行 6 万次循环，未随页面隐藏暂停",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/game.js:174-182 heavyPerfWork 执行 6 万次循环并被 setInterval(...,0) 常驻启动，无 clearInterval、无 visibilitychange 暂停；代码成立。但 Host E1 fps=60.31，报告自述'卡顿幅度未量化'，MAJOR 对应的'明显卡顿'影响证据不足。"
+        }
+      ],
+      "deductions": [
+        {
+          "points": 5,
+          "reason": "视觉与原始日志证据未实际核对：红队自述无法读取 4 张证据卡原图及 console/network 原始条目，F7「4 张证据卡均有破图区域」、F1「consoleError 与点击步骤对应」属于依据源码 + Host 计数的外推；E1/E4 又只有单帧（E4 在默认 0/100 下存读），视觉与错误通道证据不足。",
+          "fix": "让 evidence runner 输出每卡原图路径与原始 console/network 日志（失败 URL、错误文本），并在攻击后的非默认状态保存/读取以展示 F5；逐卡核对后再下视觉结论。"
+        },
+        {
+          "points": 2.5,
+          "reason": "F8 的影响未量化：Host manifest 中 E1 fps=60.31，未提供长任务/掉帧数据，报告也承认「卡顿幅度未量化」，却仍按 MAJOR 的「明显卡顿」表述；按 rubric「可玩性受损→MAJOR」应补证或降级。",
+          "fix": "补 Performance trace、低端设备与长时运行数据；若不能证明掉帧，将 F8 降为 MINOR 并只作为优化项。"
+        },
+        {
+          "points": 2.5,
+          "reason": "漏报一处 README 与实现不一致：README.md:11 宣称「击败一定数量的月影狼后会刷新更强的敌人」，而 assets/game.js:84-88 只是把敌人重置为同一 ENEMY_MAX_HP，index.html:70 固定为「月影狼 · Lv.1」，无强度递增（MINOR 文档/实现不符）。",
+          "fix": "实现敌人强度递增并同步 UI，或修订 README.md:11 删除该宣称。"
+        },
+        {
+          "points": 5,
+          "reason": "F3 分级偏离 Host 游戏 rubric：rubric 明确「抽卡/掉落概率公示与实现不一致」属 BLOCKER（合规/信任），红队仍记 MAJOR，且报告中自述承认 rubric 要求更高，属分级偏轻。",
+          "fix": "将 F3 提升为 BLOCKER，或写明偏离 rubric 的明确依据；保留 assets/game.js:12、index.html:43、README.md:18/25 的行号证据。"
+        },
+        {
+          "points": 2.5,
+          "reason": "视觉与原始日志证据使用不足：红队自述无法读取 4 张证据图和 console/network 原始文本，却断言「4 张证据卡中都存在破图区域」「结束层永久覆盖」；E1/E4 是单帧交互，异常计数没有原始错误文本/URL 佐证。",
+          "fix": "实际查看代表图并引用可见破图/覆盖层画面；导出 console/network 原始条目（URL 与错误文本），或把像素级视觉结论降为未验证。"
+        },
+        {
+          "points": 2.5,
+          "reason": "两处证据归因/影响推断过强：E1 步骤根本没有 #save 点击，其 networkFailure=2 不可能来自云同步请求，F2 引用 E1 计数不当；F8 宣称「明显卡顿/可玩性受损」但 Host fps=60.31 未显示掉帧。",
+          "fix": "F2 改用 E4（含 #save 点击）或仅用源码证明云外呼；F8 明确标注为代码级忙循环、影响未量化，再按 rubric 的影响标准定级。"
+        },
+        {
+          "points": 2.5,
+          "reason": "轻微漏报（MINOR）：README.md:11 宣称「击败一定数量的月影狼后会刷新更强的敌人」，但 assets/game.js:82-88 只把同一敌人 HP 重置为 100，从未提升等级或强度，属宣称与实现不一致，红队未列出。",
+          "fix": "补充该宣称-实现不一致（可按 MINOR 处理），或明确说明它不在本轮 claims 范围内。"
+        }
+      ],
+      "mustFix": [
+        "F1 重开软锁：实现 resetGame() 或重写重开流程，重置 state、隐藏 #gameover、重新启用 #start/#attack（assets/game.js:164-166、69、105-111；assets/styles.css:290-306）。",
+        "F2 前端凭据：删除 assets/game.js:15-16 的 CLOUD_API_KEY/直连 URL 与 :126-135 的 fetch，改为服务端代理；无后端则彻底移除云同步。",
+        "F3 掉落率：RARE_DROP_RATE 改为 0.2，与 index.html:43、README.md:18/25 对齐，并处理或删除 LEGENDARY_DROP_RATE（assets/game.js:12-13、92）。",
+        "F4 HP 下限：使用 state.playerHp = Math.max(0, state.playerHp - ATTACK_DAMAGE)，按钳制后的值判定结束与标题（assets/game.js:97、109）。",
+        "F5 存档字段：统一保存/读取字段名，读档恢复 started 与攻击按钮态，并处理旧存档（assets/game.js:114、138-155）。",
+        "F6 键盘可访问性：删除全局 Tab/Space preventDefault，为结束层补 role=dialog/aria-modal 与焦点迁移（assets/game.js:168-172；index.html:87-90）。",
+        "F7 资源完整性：补齐 assets/img/legendary.png，或改为内联 SVG/占位图并加 onerror 兜底（index.html:97）。",
+        "F8 忙循环：删除 setInterval(heavyPerfWork, 0)，或改用 rAF/visibilitychange 节流并清理（assets/game.js:174-182）。",
+        "F1 重开软锁：实现 resetGame() 或删除未定义调用，并保证重开后恢复 #start/#attack 按钮状态、隐藏 #gameover（assets/game.js:164-166、:69、:107-108）。",
+        "F2 凭据泄露：删除 assets/game.js:15 的前端硬编码 API key 与 :125-135 的浏览器直连 fetch，改为服务端代理；无后端则移除云同步，才能兑现 README.md:3/42 的离线承诺。",
+        "F3 概率公示：把 RARE_DROP_RATE 改为 0.2 并同步 UI/README，或修改公示文案；同时处理从未接线的 LEGENDARY_DROP_RATE（assets/game.js:12-13、index.html:43、README.md:18/25）。",
+        "F4 负血：在 assets/game.js:97 伤害结算后钳制 Math.max(0, state.playerHp - ATTACK_DAMAGE)，并让结束标题 :109 与存档 :114 使用钳制后的值。",
+        "F5 存档字段：统一保存/读取字段（assets/game.js:114 与 :152-153），读档恢复 state.started 与按钮禁用态，并补充存档版本/校验。",
+        "F6 键盘可访问性：删除 assets/game.js:168-172 对 Tab/Space 的全局 preventDefault，并为结束层（index.html:87-91）补 dialog/aria-modal 语义与焦点迁移。",
+        "F8 性能：移除 assets/game.js:174-182 的 setInterval(heavyPerfWork, 0) 忙循环，或改 rAF 节流并在 visibilitychange 时暂停/清理。"
+      ],
+      "screenshots": {
+        "count": 4,
+        "quality": "partial",
+        "note": "以 Host manifest 为准：4 张代表图齐全，均为 1440×900，sha256 与命名一致。覆盖：E1 开始+5 次攻击（中局，8 步，fps=60.31）、desktop 首屏、E3 15 次攻击→gameover→重开→after-restart（20 步，2 帧）、E4 保存/读取（5 步，1 帧），四类状态基本齐备。不足：E1/E4 只有单帧，E4 在默认 0/100 状态存读、没有展示 F5 字段错配的可见后果；红队未读取原图像素及原始 console/network（E1/E3/E4 仅 2/2/3、2/2/4），'四卡均有破图区域'等视觉结论依赖代码+计数外推，故质量记 partial。"
+      },
+      "nextAction": "fix_and_review",
+      "rationale": "[判官 1] 8 条红队发现均可在源码定位并 support：F1 的 resetGame 未定义（assets/game.js:165）与 F2 的明文 key/直连 fetch（assets/game.js:15、126-135）是硬阻断，F3-F8 也都能逐条命中所引行号，故 findingsCount=8、未被驳回。证据卡 4 张齐全（1440×900）并覆盖开始/中局/存档/结束，但红队自述未能读取原图与原始 console/network 日志，F7 的「四卡均有破图」与 F1 的错误归因是代码+计数外推，且 F8 的「明显卡顿」与 Host fps=60.31 不符，故证据质量记 partial 并扣 5 分。另 F3 按 Host game rubric 可评 BLOCKER、报告标 MAJOR 偏保守（不影响门控）；漏报 README.md:11「刷新更强敌人」与 assets/game.js:84-88 固定 Lv.1 无递增，扣 2.5；F8 影响未量化扣 2.5，扣分后原始分 90。因 F1/F2 两个 supported BLOCKER 触发 60 分硬上限，最终 60.0。未验证项：390px 移动端与响应式、prefers-reduced-motion、localStorage 配额/隐私模式异常路径、性能长时 trace 与低端设备表现。\n[判官 2] 独立复核确认 8 条发现全部有源码或页面行号支撑：F1（assets/game.js:164-166 未定义 resetGame、:69 start 永久禁用、styles.css:290-308 覆盖层）与 F2（assets/game.js:15 硬编码 key、:125-135 Bearer 外呼）是真实 BLOCKER，F3-F8 分别落在 assets/game.js:12、:97、:114/:152-153、:168-172、index.html:97、:174-182。F3 按 Host 游戏 rubric 应记 BLOCKER（红队记 MAJOR）；F2 用 E1 networkFailure 归因云同步不成立、F7「4 张卡均有破图」与 F8「明显卡顿」缺少像素/原始日志/fps 支撑，已按证据不足扣分。4 张证据卡按 Host manifest 齐全且尺寸/哈希合规，覆盖开始/中局/结束重开/存档，但 E1/E4 单帧且异常计数无原始日志，视觉覆盖为 partial。未验证项包括像素级视觉、原始 console/network 日志、390px 移动端与真机性能，以及属于不可自动评分项的玩法手感与平衡；另有 README.md:11「刷新更强敌人」漏报，按 MINOR 扣 2.5。按硬性规则，supported BLOCKER（含 F3）存在时总分上限 60.0，且 mustFix 非空，原始扣分后 87.5 仍受上限约束，最终给 60.0，不能停止交付。",
+      "disagreement": {
+        "scoreSpread": 0,
+        "mustFixMismatch": true,
+        "verdictMismatch": false,
+        "disagree": true
+      }
+    },
+    "gate": {
+      "passed": false,
+      "score": 60,
+      "requiredScore": 95,
+      "findings": 8,
+      "requiredFindings": 3,
+      "shots": 4,
+      "requiredShots": 4,
+      "failReasons": [
+        "评分 60 < 要求 95",
+        "mustFix 仍有 15 项未清空",
+        "存在判官认定为 supported 的阻断项（BLOCKER 3 条 / MAJOR 5 条），必须修复后重评"
+      ]
+    },
+    "shots": [
+      {
+        "file": "r1-s1-e1.png",
+        "width": 1440,
+        "height": 900,
+        "bytes": 325972,
+        "sha256": "7cb285e1ece892e75880e38f47eb46b45b9b21e60f8534251588bee3f9ce5fe2"
+      },
+      {
+        "file": "r1-s2-desktop.png",
+        "width": 1440,
+        "height": 900,
+        "bytes": 304667,
+        "sha256": "7063945a27c141564f820d12baeb5e924f7e3de4957413ba8925733ae4179f2e"
+      },
+      {
+        "file": "r1-s3-e3.png",
+        "width": 1440,
+        "height": 900,
+        "bytes": 246466,
+        "sha256": "fe5b7303da6dd4fd5fb499c22d44cae047f0446769867f73dbf3ac6404974a4c"
+      },
+      {
+        "file": "r1-s4-e4.png",
+        "width": 1440,
+        "height": 900,
+        "bytes": 313126,
+        "sha256": "a7fd08691e735ecba80c804bffa9ff3a624ca41d973a0aea489a705d3947677a"
+      }
+    ],
+    "evidence": [
+      {
+        "index": 0,
+        "name": "E1",
+        "kind": "interaction",
+        "artifacts": [
+          {
+            "file": "r1-s1-e1.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdnme6g-u0fddy\\r1-s1-e1.png",
+            "width": 1440,
+            "height": 900,
+            "bytes": 325972,
+            "sha256": "7cb285e1ece892e75880e38f47eb46b45b9b21e60f8534251588bee3f9ce5fe2",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": "playing"
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/game-seeded/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [
+              "log:error: network Failed to load resource: net::ERR_FILE_NOT_FOUND",
+              "log:error: network Failed to load resource: net::ERR_FILE_NOT_FOUND"
+            ],
+            "errors": 2,
+            "truncated": false
+          },
+          "network": {
+            "requests": 6,
+            "failures": 2,
+            "truncated": false,
+            "failureSamples": [
+              "Image net::ERR_FILE_NOT_FOUND",
+              "Image net::ERR_FILE_NOT_FOUND"
+            ]
+          },
+          "perf": {
+            "metrics": {
+              "Timestamp": 957030.535916,
+              "AudioHandlers": 0,
+              "AudioWorkletProcessors": 0,
+              "Documents": 6,
+              "Frames": 7,
+              "JSEventListeners": 12,
+              "LayoutObjects": 212,
+              "MediaKeySessions": 0,
+              "MediaKeys": 0,
+              "Nodes": 487,
+              "Resources": 6,
+              "ContextLifecycleStateObservers": 6
+            },
+            "fps": 60.31
+          },
+          "steps": [
+            {
+              "action": "goto",
+              "ms": 46
+            },
+            {
+              "action": "click",
+              "selector": "#start",
+              "tag": "BUTTON",
+              "ms": 11
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 1
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 1
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "screenshot",
+              "name": "playing",
+              "file": "r1-s1-e1.png",
+              "ms": 188
+            }
+          ]
+        }
+      },
+      {
+        "index": 1,
+        "name": "desktop",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r1-s2-desktop.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdnme6g-u0fddy\\r1-s2-desktop.png",
+            "width": 1440,
+            "height": 900,
+            "bytes": 304667,
+            "sha256": "7063945a27c141564f820d12baeb5e924f7e3de4957413ba8925733ae4179f2e",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/game-seeded/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      },
+      {
+        "index": 2,
+        "name": "E3",
+        "kind": "interaction",
+        "artifacts": [
+          {
+            "file": "r1-s3-e3.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdnme6g-u0fddy\\r1-s3-e3.png",
+            "width": 1440,
+            "height": 900,
+            "bytes": 246466,
+            "sha256": "fe5b7303da6dd4fd5fb499c22d44cae047f0446769867f73dbf3ac6404974a4c",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": "gameover"
+          },
+          {
+            "file": "r1-s3-x2-after-restart.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdnme6g-u0fddy\\r1-s3-x2-after-restart.png",
+            "width": 1440,
+            "height": 900,
+            "bytes": 245763,
+            "sha256": "ffcc723407f6c55ba9c7927c0fdb9093cf304de209566d94f186c6ca7cf33ffd",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": "after-restart"
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/game-seeded/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [
+              "log:error: network Failed to load resource: net::ERR_FILE_NOT_FOUND",
+              "log:error: network Failed to load resource: net::ERR_FILE_NOT_FOUND"
+            ],
+            "errors": 2,
+            "truncated": false
+          },
+          "network": {
+            "requests": 6,
+            "failures": 2,
+            "truncated": false,
+            "failureSamples": [
+              "Image net::ERR_FILE_NOT_FOUND",
+              "Image net::ERR_FILE_NOT_FOUND"
+            ]
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": [
+            {
+              "action": "goto",
+              "ms": 34
+            },
+            {
+              "action": "click",
+              "selector": "#start",
+              "tag": "BUTTON",
+              "ms": 1
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 1
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 1
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 1
+            },
+            {
+              "action": "click",
+              "selector": "#attack",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "screenshot",
+              "name": "gameover",
+              "file": "r1-s3-e3.png",
+              "ms": 165
+            },
+            {
+              "action": "click",
+              "selector": "#restart",
+              "tag": "BUTTON",
+              "ms": 2
+            },
+            {
+              "action": "screenshot",
+              "name": "after-restart",
+              "file": "r1-s3-x2-after-restart.png",
+              "ms": 143
+            }
+          ]
+        }
+      },
+      {
+        "index": 3,
+        "name": "E4",
+        "kind": "interaction",
+        "artifacts": [
+          {
+            "file": "r1-s4-e4.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdnme6g-u0fddy\\r1-s4-e4.png",
+            "width": 1440,
+            "height": 900,
+            "bytes": 313126,
+            "sha256": "a7fd08691e735ecba80c804bffa9ff3a624ca41d973a0aea489a705d3947677a",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": "save-load"
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/game-seeded/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [
+              "log:error: network Failed to load resource: net::ERR_FILE_NOT_FOUND",
+              "log:error: network Failed to load resource: net::ERR_FILE_NOT_FOUND",
+              "log:error: network Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+            ],
+            "errors": 3,
+            "truncated": false
+          },
+          "network": {
+            "requests": 6,
+            "failures": 4,
+            "truncated": false,
+            "failureSamples": [
+              "Image net::ERR_FILE_NOT_FOUND",
+              "Image net::ERR_FILE_NOT_FOUND",
+              "Preflight net::ERR_NAME_NOT_RESOLVED",
+              "Fetch net::ERR_NAME_NOT_RESOLVED"
+            ]
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": [
+            {
+              "action": "goto",
+              "ms": 34
+            },
+            {
+              "action": "click",
+              "selector": "#start",
+              "tag": "BUTTON",
+              "ms": 1
+            },
+            {
+              "action": "click",
+              "selector": "#save",
+              "tag": "BUTTON",
+              "ms": 1
+            },
+            {
+              "action": "click",
+              "selector": "#load",
+              "tag": "BUTTON",
+              "ms": 0
+            },
+            {
+              "action": "screenshot",
+              "name": "save-load",
+              "file": "r1-s4-e4.png",
+              "ms": 136
+            }
+          ]
+        }
+      }
+    ],
+    "judges": [
+      {
+        "index": 0,
+        "sessionId": "dc1b8f80-dab1-4201-af40-9f8c7ef57a11",
+        "score": 60,
+        "rawScore": 60,
+        "verdict": "BLOCK",
+        "findingsCount": 8,
+        "supportedCount": 8,
+        "mustFix": [
+          "F1 重开软锁：实现 resetGame() 或重写重开流程，重置 state、隐藏 #gameover、重新启用 #start/#attack（assets/game.js:164-166、69、105-111；assets/styles.css:290-306）。",
+          "F2 前端凭据：删除 assets/game.js:15-16 的 CLOUD_API_KEY/直连 URL 与 :126-135 的 fetch，改为服务端代理；无后端则彻底移除云同步。",
+          "F3 掉落率：RARE_DROP_RATE 改为 0.2，与 index.html:43、README.md:18/25 对齐，并处理或删除 LEGENDARY_DROP_RATE（assets/game.js:12-13、92）。",
+          "F4 HP 下限：使用 state.playerHp = Math.max(0, state.playerHp - ATTACK_DAMAGE)，按钳制后的值判定结束与标题（assets/game.js:97、109）。",
+          "F5 存档字段：统一保存/读取字段名，读档恢复 started 与攻击按钮态，并处理旧存档（assets/game.js:114、138-155）。",
+          "F6 键盘可访问性：删除全局 Tab/Space preventDefault，为结束层补 role=dialog/aria-modal 与焦点迁移（assets/game.js:168-172；index.html:87-90）。",
+          "F7 资源完整性：补齐 assets/img/legendary.png，或改为内联 SVG/占位图并加 onerror 兜底（index.html:97）。",
+          "F8 忙循环：删除 setInterval(heavyPerfWork, 0)，或改用 rAF/visibilitychange 节流并清理（assets/game.js:174-182）。"
+        ],
+        "deductions": [
+          {
+            "points": 5,
+            "reason": "视觉与原始日志证据未实际核对：红队自述无法读取 4 张证据卡原图及 console/network 原始条目，F7「4 张证据卡均有破图区域」、F1「consoleError 与点击步骤对应」属于依据源码 + Host 计数的外推；E1/E4 又只有单帧（E4 在默认 0/100 下存读），视觉与错误通道证据不足。",
+            "fix": "让 evidence runner 输出每卡原图路径与原始 console/network 日志（失败 URL、错误文本），并在攻击后的非默认状态保存/读取以展示 F5；逐卡核对后再下视觉结论。"
+          },
+          {
+            "points": 2.5,
+            "reason": "F8 的影响未量化：Host manifest 中 E1 fps=60.31，未提供长任务/掉帧数据，报告也承认「卡顿幅度未量化」，却仍按 MAJOR 的「明显卡顿」表述；按 rubric「可玩性受损→MAJOR」应补证或降级。",
+            "fix": "补 Performance trace、低端设备与长时运行数据；若不能证明掉帧，将 F8 降为 MINOR 并只作为优化项。"
+          },
+          {
+            "points": 2.5,
+            "reason": "漏报一处 README 与实现不一致：README.md:11 宣称「击败一定数量的月影狼后会刷新更强的敌人」，而 assets/game.js:84-88 只是把敌人重置为同一 ENEMY_MAX_HP，index.html:70 固定为「月影狼 · Lv.1」，无强度递增（MINOR 文档/实现不符）。",
+            "fix": "实现敌人强度递增并同步 UI，或修订 README.md:11 删除该宣称。"
+          }
+        ],
+        "rationale": "8 条红队发现均可在源码定位并 support：F1 的 resetGame 未定义（assets/game.js:165）与 F2 的明文 key/直连 fetch（assets/game.js:15、126-135）是硬阻断，F3-F8 也都能逐条命中所引行号，故 findingsCount=8、未被驳回。证据卡 4 张齐全（1440×900）并覆盖开始/中局/存档/结束，但红队自述未能读取原图与原始 console/network 日志，F7 的「四卡均有破图」与 F1 的错误归因是代码+计数外推，且 F8 的「明显卡顿」与 Host fps=60.31 不符，故证据质量记 partial 并扣 5 分。另 F3 按 Host game rubric 可评 BLOCKER、报告标 MAJOR 偏保守（不影响门控）；漏报 README.md:11「刷新更强敌人」与 assets/game.js:84-88 固定 Lv.1 无递增，扣 2.5；F8 影响未量化扣 2.5，扣分后原始分 90。因 F1/F2 两个 supported BLOCKER 触发 60 分硬上限，最终 60.0。未验证项：390px 移动端与响应式、prefers-reduced-motion、localStorage 配额/隐私模式异常路径、性能长时 trace 与低端设备表现。",
+        "rawSnippet": "{\"score\":60,\"verdict\":\"BLOCK\",\"findingsCount\":8,\"validFindings\":[{\"title\":\"重开按钮调用未定义的 resetGame()，点击抛 ReferenceError 且结束层无法关闭，形成软锁\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"assets/game.js:164-166（调用在 :165）无 resetGame 定义；assets/game.js:69 与 :107 分别禁用 #start/#attack，assets/styles.css:290-306 的结束层 position:absolute/inset:0/z-index:5 仍覆盖舞台，点击后 ReferenceError 使 overlay 无法关闭，软锁成立。E3 的 20 步包含 restart 点击，Host consoleError=2 与之一致（原始报错文本未提供）。\"},{\"title\":\"前端源码硬编码 API key 并携带 Bearer 直连外部 API\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"assets/game.js:15 存在明文 CLOUD_API_KEY、:16 为外部 CLOUD_SAVE_URL、:126-135 的 fetch 携带 Authorization: Bearer；index.html 无后端/代理，README.md:3 宣称完全离线。凭据暴露成立；目标域为 .example，'冒用云服务'无法实证，但不影响硬编码凭据的阻断性质。\"},{\"title\":\"稀有掉落率实现为 50%，与页面/README 公示的 20% 不一致\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"assets/game.js:12 RARE_DROP_RATE=0.5 且 :92 使用；index.html:43 与 README.md:18/25 公示 20%；:13 的 LEGENDARY_DROP_RATE 定义后未接线。不一致成立；Host game rubric 将概率公示不一致列为 BLOCKER，红队标 MAJOR 偏保守，但不影响本轮门控。\"},{\"title\":\"玩家 HP 相减无下限钳制，第 15 次攻击后为 -5 并显示/写入负血\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"assets/game.js:97 playerHp -= ATTACK_DAMAGE 无 Math.max；:50 只对敌人 HP 做了钳制；:109 把原值拼进结束标题；15 次攻击后 HP=-5 并可在 :114-116 写入存档。E3 的 15 次攻击步骤与 gameover 帧对应。\"},{\"title\":\"存档字段 {score,hp} 与读档读取的 points/health 不匹配，读档静默丢失分数并把 HP 重置为 100\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"assets/game.js:114 保存 {score,hp}，:152-153 却读取 saved.points/saved.health，读档静默变为 0/100；:138-155 不恢复 state.started，刷新后 #attack 仍 disabled。E4 在默认 0/100 下存读、未展示可见后果，但源码路径足以确认字段错配。\"},{\"title\":\"全局 keydown 拦截 Tab 与空格，键盘无法移动焦点或触发按钮\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"assets/game.js:168-172 对 Tab 与空格调用 preventDefault；index.html:9 脚本 defer 加载即生效；index.html:87-90 结束层无 role=dialog/aria-modal，焦点也不迁移。核心键盘操作不可达成立。\"},{\"title\":\"传说装备图片 assets/img/legendary.png 不存在，页面出现坏图与网络失败\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"index.html:97 引用 assets/img/legendary.png；review_probe list-files 仅返回 6 个文件、无 assets/img 目录，且 img 无 onerror 兜底；Host E1/…",
+        "warnings": [],
+        "modelRoute": null
+      },
+      {
+        "index": 1,
+        "sessionId": "3410bce7-2a08-4be6-be02-80a55b2260ef",
+        "score": 60,
+        "rawScore": 60,
+        "verdict": "BLOCK",
+        "findingsCount": 8,
+        "supportedCount": 8,
+        "mustFix": [
+          "F1 重开软锁：实现 resetGame() 或删除未定义调用，并保证重开后恢复 #start/#attack 按钮状态、隐藏 #gameover（assets/game.js:164-166、:69、:107-108）。",
+          "F2 凭据泄露：删除 assets/game.js:15 的前端硬编码 API key 与 :125-135 的浏览器直连 fetch，改为服务端代理；无后端则移除云同步，才能兑现 README.md:3/42 的离线承诺。",
+          "F3 概率公示：把 RARE_DROP_RATE 改为 0.2 并同步 UI/README，或修改公示文案；同时处理从未接线的 LEGENDARY_DROP_RATE（assets/game.js:12-13、index.html:43、README.md:18/25）。",
+          "F4 负血：在 assets/game.js:97 伤害结算后钳制 Math.max(0, state.playerHp - ATTACK_DAMAGE)，并让结束标题 :109 与存档 :114 使用钳制后的值。",
+          "F5 存档字段：统一保存/读取字段（assets/game.js:114 与 :152-153），读档恢复 state.started 与按钮禁用态，并补充存档版本/校验。",
+          "F6 键盘可访问性：删除 assets/game.js:168-172 对 Tab/Space 的全局 preventDefault，并为结束层（index.html:87-91）补 dialog/aria-modal 语义与焦点迁移。",
+          "F7 资源完整性：补齐 assets/img/legendary.png，或改为内联 SVG/占位图并加 onerror 兜底（index.html:97）。",
+          "F8 性能：移除 assets/game.js:174-182 的 setInterval(heavyPerfWork, 0) 忙循环，或改 rAF 节流并在 visibilitychange 时暂停/清理。"
+        ],
+        "deductions": [
+          {
+            "points": 5,
+            "reason": "F3 分级偏离 Host 游戏 rubric：rubric 明确「抽卡/掉落概率公示与实现不一致」属 BLOCKER（合规/信任），红队仍记 MAJOR，且报告中自述承认 rubric 要求更高，属分级偏轻。",
+            "fix": "将 F3 提升为 BLOCKER，或写明偏离 rubric 的明确依据；保留 assets/game.js:12、index.html:43、README.md:18/25 的行号证据。"
+          },
+          {
+            "points": 2.5,
+            "reason": "视觉与原始日志证据使用不足：红队自述无法读取 4 张证据图和 console/network 原始文本，却断言「4 张证据卡中都存在破图区域」「结束层永久覆盖」；E1/E4 是单帧交互，异常计数没有原始错误文本/URL 佐证。",
+            "fix": "实际查看代表图并引用可见破图/覆盖层画面；导出 console/network 原始条目（URL 与错误文本），或把像素级视觉结论降为未验证。"
+          },
+          {
+            "points": 2.5,
+            "reason": "两处证据归因/影响推断过强：E1 步骤根本没有 #save 点击，其 networkFailure=2 不可能来自云同步请求，F2 引用 E1 计数不当；F8 宣称「明显卡顿/可玩性受损」但 Host fps=60.31 未显示掉帧。",
+            "fix": "F2 改用 E4（含 #save 点击）或仅用源码证明云外呼；F8 明确标注为代码级忙循环、影响未量化，再按 rubric 的影响标准定级。"
+          },
+          {
+            "points": 2.5,
+            "reason": "轻微漏报（MINOR）：README.md:11 宣称「击败一定数量的月影狼后会刷新更强的敌人」，但 assets/game.js:82-88 只把同一敌人 HP 重置为 100，从未提升等级或强度，属宣称与实现不一致，红队未列出。",
+            "fix": "补充该宣称-实现不一致（可按 MINOR 处理），或明确说明它不在本轮 claims 范围内。"
+          }
+        ],
+        "rationale": "独立复核确认 8 条发现全部有源码或页面行号支撑：F1（assets/game.js:164-166 未定义 resetGame、:69 start 永久禁用、styles.css:290-308 覆盖层）与 F2（assets/game.js:15 硬编码 key、:125-135 Bearer 外呼）是真实 BLOCKER，F3-F8 分别落在 assets/game.js:12、:97、:114/:152-153、:168-172、index.html:97、:174-182。F3 按 Host 游戏 rubric 应记 BLOCKER（红队记 MAJOR）；F2 用 E1 networkFailure 归因云同步不成立、F7「4 张卡均有破图」与 F8「明显卡顿」缺少像素/原始日志/fps 支撑，已按证据不足扣分。4 张证据卡按 Host manifest 齐全且尺寸/哈希合规，覆盖开始/中局/结束重开/存档，但 E1/E4 单帧且异常计数无原始日志，视觉覆盖为 partial。未验证项包括像素级视觉、原始 console/network 日志、390px 移动端与真机性能，以及属于不可自动评分项的玩法手感与平衡；另有 README.md:11「刷新更强敌人」漏报，按 MINOR 扣 2.5。按硬性规则，supported BLOCKER（含 F3）存在时总分上限 60.0，且 mustFix 非空，原始扣分后 87.5 仍受上限约束，最终给 60.0，不能停止交付。",
+        "rawSnippet": "{\"score\":60,\"verdict\":\"BLOCK\",\"findingsCount\":8,\"validFindings\":[{\"title\":\"重开按钮调用未定义的 resetGame()，点击抛 ReferenceError 且结束层无法关闭，形成软锁\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"assets/game.js:164-166 注册 #restart 并调用 resetGame()，全项目运行期仅此一处（labels.json 为基准元数据，不是运行代码）；:69 禁用 #start 后没有任何恢复路径；:105-111 显示结束层；assets/styles.css:290-308 的 .gameover 以 position:absolute; inset:0; z-index:5 覆盖 stage。15 次攻击 → 结束层 → 点重开即可复现软锁，supported。\"},{\"title\":\"前端源码硬编码 API key 并携带 Bearer 直连外部 API\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"assets/game.js:15 明文 [REDACTED:openai-key]…；:16 CLOUD_SAVE_URL；:126-135 fetch POST；:130 'Authorization': 'Bearer ' + CLOUD_API_KEY；index.html 无后端，README.md:3/42 宣称完全离线。源码证据充分，supported。注意：E1 步骤没有 #save 点击，其 networkFailure=2 不能直接归因云同步（更可能来自缺失图片），该归因问题已单独扣分。\"},{\"title\":\"稀有掉落率实现为 50%，与页面/README 公示的 20% 不一致\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"assets/game.js:12 RARE_DROP_RATE=0.5、:92 使用该常量；index.html:43 与 README.md:18/25 均写 20%；:13 LEGENDARY_DROP_RATE=0.05 定义后从未使用。常量与文案不一致可静态证成，supported。按 Host 游戏 rubric（概率公示与实现不一致=BLOCKER）应记 BLOCKER，红队记 MAJOR，已在 deductions 扣分。\"},{\"title\":\"玩家 HP 相减无下限钳制，第 15 次攻击后为 -5 并显示/写入负血\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"assets/game.js:97 state.playerHp -= ATTACK_DAMAGE 无 Math.max 钳制；:100-102 仅 ≤0 触发 gameOver；:109 标题直接拼接 state.playerHp；:114 保存负 HP；对照 :50 只对敌人 HP 做 Math.max(0,…)。开始后攻击 15 次 HUD/结束标题出现 -5，supported。\"},{\"title\":\"存档字段 {score,hp} 与读档读取的 points/health 不匹配，读档静默丢失分数并把 HP 重置为 100\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"assets/game.js:114 写入 { score: state.score, hp: state.playerHp }；:152-153 却读 saved.points / saved.health；:138-157 未恢复 state.started；README.md:26 宣称读取后与保存一致。E4 的 start→save→load 步骤可复现 0 分/100 HP，supported。\"},{\"title\":\"全局 keydown 拦截 Tab 与空格，键盘无法移动焦点或触发按钮\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"assets/game.js:168-172 对 event.key === 'Tab' 与 ' ' 调用 preventDefault；index.html:79-90 按钮无其他键盘入口；index.html:87-91 结束层无 role=dialog/aria-modal，gameOver 无焦点迁移。纯键盘无法到达核心按钮，supported。\"},{\"title\":\"传说装备图片 ass…",
+        "warnings": [],
+        "modelRoute": null
+      }
+    ],
+    "disagreement": {
+      "scoreSpread": 0,
+      "mustFixMismatch": true,
+      "verdictMismatch": false,
+      "disagree": true
+    },
+    "snapshot": {
+      "manifestHash": "e2e118353f2b72e60b622f8645eb1c136eb2c86c9c01d3c994be110f0c8395b4",
+      "gitCommit": null,
+      "fileCount": 6,
+      "hashedBytes": 28476,
+      "truncated": false,
+      "skippedCount": 0,
+      "createdAt": 1792317598812
+    }
+  }
+}

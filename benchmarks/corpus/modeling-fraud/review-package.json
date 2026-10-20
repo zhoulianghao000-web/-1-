@@ -1,0 +1,59 @@
+{
+  "fixture": "modeling-fraud",
+  "title": "交易欺诈检测 · 实验报告（v2.0 校准语料）",
+  "target": ".",
+  "notes": "由 benchmarks/corpus/generate.mjs 自动生成；4 个既有 fixture + 16 个合成语料共 20 个项目。合成语料含故意注入的种子缺陷，不要用手工修改生成文件（--check 会失败）。",
+  "claims": [
+    "测试集 accuracy 达到 0.95，与 metrics.json 完全一致",
+    "报告表格、图表与 metrics.json 的指标数字一致",
+    "固定随机种子，重复运行 model.py 会得到完全相同的 train/test 划分与指标",
+    "超参数搜索流程规范，完整报告所有搜索结果"
+  ],
+  "focus": [
+    "数据/时序泄漏",
+    "可复现性（随机种子）",
+    "指标与宣称一致性",
+    "图表/表格一致性",
+    "baseline 与统计显著性",
+    "p-hacking 与报告规范"
+  ],
+  "outOfScope": "模型创新性、调参质量、写作排版与训练成本不在本轮范围；纯风格偏好不作为缺陷",
+  "environment": "只读文件浏览 + review_probe；无网络、无浏览器控制（报告页由 Host 按 4 个视口截图）",
+  "timeBudget": "约 15–20 分钟",
+  "shots": [
+    {
+      "path": "report.html",
+      "width": 1440,
+      "height": 900,
+      "name": "desktop"
+    },
+    {
+      "path": "report.html",
+      "width": 1280,
+      "height": 800,
+      "name": "laptop"
+    },
+    {
+      "path": "report.html",
+      "width": 768,
+      "height": 1024,
+      "name": "tablet"
+    },
+    {
+      "path": "report.html",
+      "width": 390,
+      "height": 844,
+      "name": "mobile"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "MO2-1",
+      "MO2-2",
+      "MO2-3",
+      "MO2-4"
+    ]
+  }
+}

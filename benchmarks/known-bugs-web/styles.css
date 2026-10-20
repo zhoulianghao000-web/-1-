@@ -1,0 +1,19 @@
+/* 校准集 v0：故意包含缺陷的极小项目。 */
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
+
+.container {
+  width: 980px; /* 缺陷：固定宽度，390px 视口会横向溢出 */
+  margin-top: 24px;
+}
+
+form {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  padding: 4px 12px;
+}

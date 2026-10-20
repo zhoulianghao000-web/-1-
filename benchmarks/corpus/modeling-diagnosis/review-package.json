@@ -1,0 +1,59 @@
+{
+  "fixture": "modeling-diagnosis",
+  "title": "疾病辅助诊断 · 实验报告（v2.0 校准语料）",
+  "target": ".",
+  "notes": "由 benchmarks/corpus/generate.mjs 自动生成；4 个既有 fixture + 16 个合成语料共 20 个项目。合成语料含故意注入的种子缺陷，不要用手工修改生成文件（--check 会失败）。",
+  "claims": [
+    "训练/测试严格划分：标准化只在训练集上拟合，不存在数据泄漏",
+    "论文描述严格先划分训练/测试，再做预处理",
+    "报告表格、图表与 metrics.json 的指标数字一致",
+    "与未正则化 logistic-regression baseline 对比提升 8.0 个 accuracy 点"
+  ],
+  "focus": [
+    "数据/时序泄漏",
+    "可复现性（随机种子）",
+    "指标与宣称一致性",
+    "图表/表格一致性",
+    "baseline 与统计显著性",
+    "p-hacking 与报告规范"
+  ],
+  "outOfScope": "模型创新性、调参质量、写作排版与训练成本不在本轮范围；纯风格偏好不作为缺陷",
+  "environment": "只读文件浏览 + review_probe；无网络、无浏览器控制（报告页由 Host 按 4 个视口截图）",
+  "timeBudget": "约 15–20 分钟",
+  "shots": [
+    {
+      "path": "report.html",
+      "width": 1440,
+      "height": 900,
+      "name": "desktop"
+    },
+    {
+      "path": "report.html",
+      "width": 1280,
+      "height": 800,
+      "name": "laptop"
+    },
+    {
+      "path": "report.html",
+      "width": 768,
+      "height": 1024,
+      "name": "tablet"
+    },
+    {
+      "path": "report.html",
+      "width": 390,
+      "height": 844,
+      "name": "mobile"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "MO3-1",
+      "MO3-2",
+      "MO3-3",
+      "MO3-4"
+    ]
+  }
+}

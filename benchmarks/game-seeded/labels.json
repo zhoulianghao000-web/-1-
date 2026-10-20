@@ -1,0 +1,118 @@
+{
+  "fixture": "game-seeded",
+  "description": "v1.2 游戏基准靶子：8 个已知种子缺陷（2 BLOCKER + 6 MAJOR），供 runner.mjs 计算 recall / precision。",
+  "labels": [
+    {
+      "id": "G1",
+      "category": "restart-softlock",
+      "severity": "BLOCKER",
+      "path": "assets/game.js",
+      "line": 165,
+      "lines": [
+        164,
+        165,
+        166
+      ],
+      "description": "重开按钮调用未定义的 resetGame()：点击后抛 ReferenceError，游戏结束层不消失，形成软锁"
+    },
+    {
+      "id": "G2",
+      "category": "state-clamp",
+      "severity": "MAJOR",
+      "path": "assets/game.js",
+      "line": 97,
+      "lines": [
+        97
+      ],
+      "description": "攻击后 playerHp 直接相减且没有下限钳制：HP 可以变成负数，游戏结束标题显示负 HP"
+    },
+    {
+      "id": "G3",
+      "category": "rate-mismatch",
+      "severity": "MAJOR",
+      "path": "assets/game.js",
+      "line": 12,
+      "lines": [
+        12,
+        13
+      ],
+      "description": "稀有掉落率与 README/UI 宣称不一致：README.md:25 与 index.html:43 写 20%，代码 RARE_DROP_RATE=0.5、LEGENDARY_DROP_RATE=0.05"
+    },
+    {
+      "id": "G4",
+      "category": "save-load-mismatch",
+      "severity": "MAJOR",
+      "path": "assets/game.js",
+      "line": 152,
+      "lines": [
+        114,
+        152,
+        153
+      ],
+      "description": "存档字段与读档字段不匹配：保存写 {score,hp}，读取却读 saved.points / saved.health，读档丢失分数与 HP"
+    },
+    {
+      "id": "G5",
+      "category": "hardcoded-secret",
+      "severity": "BLOCKER",
+      "path": "assets/game.js",
+      "line": 15,
+      "lines": [
+        15,
+        16,
+        130
+      ],
+      "description": "前端硬编码 API key（sk-live-demo-…）并直接向外部 API 发起 fetch（Authorization: Bearer），凭据暴露在客户端"
+    },
+    {
+      "id": "G6",
+      "category": "broken-image",
+      "severity": "MAJOR",
+      "path": "index.html",
+      "line": 97,
+      "lines": [
+        97
+      ],
+      "description": "传说装备图片引用 assets/img/legendary.png，但该文件不存在，坏图保留在 DOM 中"
+    },
+    {
+      "id": "G7",
+      "category": "keyboard-trap",
+      "severity": "MAJOR",
+      "path": "assets/game.js",
+      "line": 170,
+      "lines": [
+        168,
+        169,
+        170
+      ],
+      "description": "全局 keydown 对 Tab 与空格调用 preventDefault，键盘无法切换焦点或触发按钮（输入/可访问性缺陷）"
+    },
+    {
+      "id": "G8",
+      "category": "perf-jank",
+      "severity": "MAJOR",
+      "path": "assets/game.js",
+      "line": 182,
+      "lines": [
+        174,
+        182
+      ],
+      "description": "setInterval(heavyPerfWork, 0) 持续在主线程执行 6 万次循环，页面仍可交互但明显卡顿"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "G1",
+      "G2",
+      "G3",
+      "G4",
+      "G5",
+      "G6",
+      "G7",
+      "G8"
+    ]
+  }
+}

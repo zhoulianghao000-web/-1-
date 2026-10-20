@@ -1,0 +1,60 @@
+{
+  "fixture": "modeling-churn",
+  "description": "v2.0 校准语料 modeling-churn：4 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "MO1-1",
+      "category": "data-leakage",
+      "severity": "BLOCKER",
+      "path": "model.py",
+      "line": 38,
+      "lines": [
+        38
+      ],
+      "description": "model.py 在 train/test 划分之前用全量 rows 拟合 scaler（fit_scaler(rows)），测试集信息泄漏进训练流程"
+    },
+    {
+      "id": "MO1-2",
+      "category": "metric-mismatch",
+      "severity": "MAJOR",
+      "path": "paper.md",
+      "line": 14,
+      "lines": [
+        14
+      ],
+      "description": "论文宣称测试集 accuracy 0.95 / F1 0.95，但 metrics.json 实测 accuracy 0.85 / F1 0.835（差约 10 个百分点）"
+    },
+    {
+      "id": "MO1-3",
+      "category": "non-reproducible",
+      "severity": "MAJOR",
+      "path": "model.py",
+      "line": 32,
+      "lines": [
+        32
+      ],
+      "description": "model.py 使用 random.shuffle(rows) 且没有 random.seed()：每次运行的 train/test 划分都不同，实验不可复现（指标也被硬编码，无法复核）"
+    },
+    {
+      "id": "MO1-4",
+      "category": "missing-baseline",
+      "severity": "MAJOR",
+      "path": "paper.md",
+      "line": 15,
+      "lines": [
+        15
+      ],
+      "description": "论文声称优于 baseline（baseline 0.87），但仓库没有任何 baseline 实现、脚本或指标文件，数字无来源"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "MO1-1",
+      "MO1-2",
+      "MO1-3",
+      "MO1-4"
+    ]
+  }
+}

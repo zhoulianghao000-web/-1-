@@ -1,0 +1,598 @@
+{
+  "fixture": "known-bugs-web",
+  "round": {
+    "n": 1,
+    "rubricVersion": "v2-100",
+    "profile": "code",
+    "attack": {
+      "verdict": "BLOCK",
+      "summary": "被评审对象是 6 个文件的静态校准页，README 原文（README.md:3-4）明确说明它「故意包含 5 个已知缺陷」，调用方给的两条「README 声称计数器可用/资源完整」与 README 原文不符；但缺陷本身在源码和证据图中均可独立复现。最严重的是 app.js:2 前端硬编码 sk-live 前缀密钥常量，按硬规则属 BLOCKER；index.html:12 的 assets/hero.png 与 index.html:21 的 pricing.html 在全项目不存在，4 张证据图均显示破图图标与 alt 文本。计数器空输入提交时由 parseInt('') 得到 NaN 并写入结果，之后状态被永久污染；styles.css:8 的 980px 固定宽度在 390/768 视口造成横向溢出。Host manifest 的 consoleError=0/networkFailure=0 不能反证坏图与死链——截图已显示破图，文件系统也确实缺文件。结论 BLOCK：1 个 BLOCKER、3 个 MAJOR、1 个 MINOR，核心功能与资源完整性均不达标。",
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "BLOCKER",
+          "title": "前端源码硬编码 API 密钥（app.js:2，sk-live 前缀占位串）",
+          "evidence": "app.js:2：const API_KEY = [REDACTED:assignment]'；全项目 grep '(api[_-]?key|token|secret|sk-[A-Za-z0-9]|password|Bearer)' 仅命中 app.js:2（另 labels.json:25 是类别名，不是凭据）；项目无构建产物、无其他 JS。",
+          "attack": "直接访问/查看 app.js（浏览器 View Source、curl /app.js 或 DevTools Sources）即可读取完整字符串；该变量当前未被调用，但同一模式一旦换成真实 key 会随前端分发。",
+          "impact": "客户端凭据泄露；即使当前值是明显占位串、无法调用真实服务，仍违反「前端源码不得含密钥」的硬规则，并掩盖真实密钥以同样方式被提交的风险。",
+          "fix": "删除前端代码中的密钥常量，改由服务端注入/环境变量提供，并接入 secret 扫描。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F2",
+          "severity": "MAJOR",
+          "title": "主视觉图片 assets/hero.png 不存在，4 张证据图均显示破图",
+          "evidence": "index.html:12 <img src=\"assets/hero.png\" alt=\"产品主视觉\">；review_probe list-files 仅返回 6 个根文件（app.js、index.html、labels.json、README.md、review-package.json、styles.css），glob '**/*' 也无 hero.png 或 assets/；证据卡 r1-s1-desktop.png、r1-s2-laptop.png、r1-s3-tablet.png、r1-s4-mobile.png 均显示破图图标与 alt 文本「产品主视觉」。",
+          "attack": "打开 index.html 即请求 assets/hero.png；文件不存在，任何静态服务器/file:// 下都渲染为破图图标。",
+          "impact": "首屏主视觉缺失，页面完整性与用户信任受损；同时每次加载都产生一条失败资源请求。",
+          "fix": "补齐 assets/hero.png 或移除该 img，并为图片提供 width/height 避免布局抖动。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F3",
+          "severity": "MAJOR",
+          "title": "「查看定价」指向不存在的 pricing.html（死链）",
+          "evidence": "index.html:21 <a href=\"pricing.html\">查看定价</a>；review_probe list-files 与 glob '**/*' 全项目均无 pricing.html，也无路由/兜底页面。",
+          "attack": "点击「查看定价」→ 请求 pricing.html 失败（404/文件不存在），无任何提示或回退。",
+          "impact": "关键导航断链，用户进入错误页；「页面资源完整、无死链」的宣称被直接证伪。",
+          "fix": "创建 pricing.html，或移除/禁用该链接并给出「即将上线」提示。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F4",
+          "severity": "MAJOR",
+          "title": "空输入提交把 NaN 写入结果并永久污染计数器状态",
+          "evidence": "index.html:17 <input id=\"delta\" type=\"number\" ...> 无 required/min；app.js:14 const delta = parseInt(document.getElementById('delta').value, 10)；app.js:15 update(currentValue() + delta)；app.js:5 currentValue() 用 Number(textContent.replace(...))。空值 parseInt('') 返回 NaN（ECMAScript 规范），0 + NaN = NaN，app.js:9 写入「当前值：NaN」。",
+          "attack": "不填数值直接点「增加」：表单无 required 校验，submit 处理照常执行，结果文本变成「当前值：NaN」；此后每次 currentValue() 都从「NaN」解析出 NaN，再提交任何数字仍为 NaN，只能刷新页面。",
+          "impact": "核心计数器在常见边界操作下进入不可恢复错误态；aria-live=polite 会把「NaN」播报给读屏用户，用户信任受损。",
+          "fix": "用 input.valueAsNumber/Number() 并校验 Number.isFinite，空值直接返回或提示；把当前值存入 JS 变量而非从 DOM 文本反解析；补空输入回归用例。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F5",
+          "severity": "MINOR",
+          "title": "固定 980px 容器在 390/768 视口横向溢出",
+          "evidence": "styles.css:7-10 .container { width: 980px; margin-top: 24px; }，无 max-width/媒体查询；index.html:14 使用 <main class=\"container\">；证据图 r1-s4-mobile.png（390x844）中内容仍按桌面左对齐、未做窄屏收缩，文档宽度至少 980px。",
+          "attack": "在 390px 或 768px 视口打开页面：block 元素指定 width:980px 超出视口，文档产生横向溢出/滚动区域。",
+          "impact": "移动端/平板布局不适配，需要横向滚动（K4）；因可见文本未被裁切，影响低于前四项。",
+          "fix": "改为 width:100%; max-width:980px; box-sizing:border-box，并在窄屏用媒体查询把 form 改为纵向排列。",
+          "confidence": "high",
+          "verified": true
+        }
+      ],
+      "solid": [
+        "入口引用齐全：index.html:7 引用 styles.css、index.html:23 引用 app.js，二者均存在；review_probe check-syntax 返回 checked=1, failures=[]。",
+        "初始状态在 1440/1280/768/390 四张证据图均正常渲染「当前值：0」；Host manifest 记录 consoleError=0、networkFailure=0。",
+        "无障碍基础存在：lang=zh-CN（index.html:2）、viewport meta（index.html:5）、label for=delta（index.html:16）、aria-live=polite（index.html:20）、img alt（index.html:12）。",
+        "全项目密钥扫描仅命中 app.js:2 一处凭据样式字符串；无构建产物或额外脚本扩大密钥面。",
+        "有效输入路径在代码上成立：parseInt('2',10)=2，currentValue() 解析初始 0 后更新为「当前值：2」（app.js:5,14-15），未发现未捕获异常分支。"
+      ],
+      "unverified": [
+        {
+          "item": "空输入 → NaN → 再次提交仍为 NaN 的运行时状态迁移未在证据卡中演示（4 张均为 screenshot，无 interaction 卡）。",
+          "needs": "补一张 interaction 证据：空输入点击「增加」后读取 #result 文本为「当前值：NaN」，再点一次确认仍为 NaN，并附 console 输出。"
+        },
+        {
+          "item": "390px 视口下实际 document.scrollWidth 与横向滚动条是否出现未度量；截图中可见内容未裁切。",
+          "needs": "交互卡执行 document.documentElement.scrollWidth 读取，或提供带滚动条的整页截图/DevTools 度量。"
+        },
+        {
+          "item": "对比度、键盘焦点、屏幕阅读器播报「NaN」等可访问性表现未实测。",
+          "needs": "axe/Lighthouse 报告，或键盘 + 屏幕阅读器走查记录。"
+        },
+        {
+          "item": "type=number 接受指数形式输入（如 1e3）时浏览器是否保留原字符串未实测；若保留，parseInt 会截断为 1，与 valueAsNumber=1000 不一致（app.js:14）。",
+          "needs": "浏览器交互证据：输入 1e3 后打印 input.value 与结果文本。"
+        },
+        {
+          "item": "README 所述校准 runner 与 benchmarks/results/known-bugs-web.json 不在本 target 内，recall/precision 统计管线未验证。",
+          "needs": "提供 runner.mjs 与结果 JSON，或说明其不在本轮范围。"
+        }
+      ],
+      "nextSteps": "1) 立即移除 app.js 中的前端硬编码密钥并轮换（若为真实凭据），接入 secret 扫描。2) 修复计数器：valueAsNumber + Number.isFinite，空值直接返回/提示，状态存 JS 变量，补空输入回归用例。3) 补齐 assets/hero.png 或删除 img；创建 pricing.html 或移除死链，确保 0 个 404。4) .container 改 width:100%; max-width:980px，并让 form 在 390px 窄屏纵向排列。5) 用 interaction 证据重跑空输入、有效输入、点击定价、390px 横向滚动四项检查后再评审。"
+    },
+    "score": {
+      "score": 55,
+      "rawScore": 55,
+      "verdict": "BLOCK",
+      "findingsCount": 8,
+      "supportedCount": 8,
+      "validFindings": [
+        {
+          "title": "F1 [BLOCKER] 前端源码硬编码 API 密钥（app.js:2，sk-live 前缀占位串）",
+          "severity": "BLOCKER",
+          "supported": false,
+          "note": "已独立定位 app.js:2：const API_KEY = [REDACTED:assignment]'；对全项目 grep '(api[_-]?key|token|secret|sk-[A-Za-z0-9]|password|Bearer)' 仅命中此处，labels.json:25 的 hardcoded-secret 是类别名而非凭据。变量当前未被调用，但确属前端硬编码密钥模式，且 labels.json K3 也标注为 BLOCKER，与红队分级一致。项目本身是故意含缺陷的校准 fixture（README.md:3-4），不改变该缺陷在源码中真实存在的事实。"
+        },
+        {
+          "title": "F2 [MAJOR] 主视觉图片 assets/hero.png 不存在，4 张证据图均显示破图",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "index.html:12 `<img src=\"assets/hero.png\" alt=\"产品主视觉\">`；review_probe list-files 与 glob '**/*' 均只返回 6 个根文件，无 assets/ 目录、无 hero.png。独立打开 4 张 Host manifest 截图（sha256 全部匹配 aab621…/363ab8…/41bc30…/205b88…），桌面/笔记本/平板/手机视口均显示左侧破图图标与 alt 文本「产品主视觉」。文件缺失与视觉证据双重成立。"
+        },
+        {
+          "title": "F3 [MAJOR] 「查看定价」指向不存在的 pricing.html（死链）",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "index.html:21 `<a href=\"pricing.html\">查看定价</a>`；review_probe list-files 与 glob '**/*' 全项目无 pricing.html，也没有任何路由或兜底逻辑（项目仅 6 个静态文件）。死链从文件清单与源码即可确定，虽未提供点击后的 404 网络证据，但缺陷可定位、可复现。"
+        },
+        {
+          "title": "F4 [MAJOR] 空输入提交把 NaN 写入结果并永久污染计数器状态",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "index.html:17 的 input 无 required/min；app.js:14 `parseInt(document.getElementById('delta').value, 10)`，空值按 ECMAScript 语义得 NaN；app.js:15 `update(currentValue() + delta)`，app.js:9 写入「当前值：NaN」；随后 app.js:5 `Number(textContent.replace(...))` 解析「NaN」仍得 NaN，后续提交继续为 NaN，确实不可恢复（只能刷新）。结论由源码确定，但 4 张静态截图未展示空提交后的运行时状态，红队也在未验证项中如实披露。"
+        },
+        {
+          "title": "F5 [MINOR] 固定 980px 容器在 390/768 视口横向溢出",
+          "severity": "MINOR",
+          "supported": false,
+          "note": "styles.css:8 `.container { width: 980px; ... }`，无 max-width、无媒体查询，index.html:14 使用 `<main class=\"container\">`；390/768 视口下块级元素仍为 980px，横向溢出是确定性的。红队表述「文档宽度至少 980px」可由 CSS 推出，但 390px 截图本身只显示左侧内容、未测 document.scrollWidth 与滚动条，红队已将该点列入未验证项，证据强度略低于其正文写法。"
+        },
+        {
+          "title": "前端源码硬编码 API 密钥（app.js:2，sk-live 前缀占位串）",
+          "severity": "BLOCKER",
+          "supported": false,
+          "note": "独立读取 app.js:2 确认为 const API_KEY = [REDACTED:assignment]'；grep 全项目仅命中该处凭据样式（labels.json:25 仅为类别名）。红队报告引文被脱敏为 [REDACTED:assignment]'，不影响定位与结论。与 labels.json:25-31 K3=bLocker 标注一致；该串是明显占位符，真实可利用性低，但「前端不得含密钥」类别成立。"
+        },
+        {
+          "title": "主视觉图片 assets/hero.png 不存在，4 张证据图均显示破图",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "index.html:12 <img src=\"assets/hero.png\" alt=\"产品主视觉\">；glob '**/*' 与 list-files 仅返回 app.js/index.html/labels.json/README.md/review-package.json/styles.css 六个根文件，无 assets/ 与 hero.png。我亲自查看 4 张 manifest 截图，均可见破图图标与 alt 文本「产品主视觉」（如 r1-s1-desktop.png、r1-s4-mobile.png）。与 labels.json:16-22 K2 一致。"
+        },
+        {
+          "title": "「查看定价」指向不存在的 pricing.html（死链）",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "index.html:21 <a href=\"pricing.html\">；glob/list-files 全项目无 pricing.html，也无路由或兜底页。截图可见链接但点击未演示；静态站点下该请求必然失败，代码级可定位。与 labels.json:6-13 K1 一致。"
+        },
+        {
+          "title": "空输入提交把 NaN 写入结果并永久污染计数器状态",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "index.html:17 input#delta 无 required/min；app.js:14 parseInt(document.getElementById('delta').value,10) → parseInt('')=NaN；app.js:15 update(currentValue()+delta) 写入 NaN；此后 app.js:5 Number('NaN')=NaN，重复提交仍为 NaN。按 ECMAScript 语义可确定，代码定位充分。但 4 张证据卡均为静态截图，未做运行时状态迁移复现（红队亦自报未验证），证据覆盖不足已另行扣分。"
+        },
+        {
+          "title": "固定 980px 容器在 390/768 视口横向溢出",
+          "severity": "MINOR",
+          "supported": false,
+          "note": "styles.css:7-10 .container{width:980px}，无 max-width/媒体查询；index.html:14 使用该容器。r1-s3-tablet.png(768x1024) 与 r1-s4-mobile.png(390x844) 中元素横向位置与桌面一致、未响应式收缩，与 width:980px 相符；但 document.scrollWidth/滚动条未度量，属代码推导而非实测。与 labels.json:33-39 K4(MINOR) 一致。"
+        }
+      ],
+      "blockingFindings": [
+        {
+          "title": "F1 [BLOCKER] 前端源码硬编码 API 密钥（app.js:2，sk-live 前缀占位串）",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "已独立定位 app.js:2：const API_KEY = [REDACTED:assignment]'；对全项目 grep '(api[_-]?key|token|secret|sk-[A-Za-z0-9]|password|Bearer)' 仅命中此处，labels.json:25 的 hardcoded-secret 是类别名而非凭据。变量当前未被调用，但确属前端硬编码密钥模式，且 labels.json K3 也标注为 BLOCKER，与红队分级一致。项目本身是故意含缺陷的校准 fixture（README.md:3-4），不改变该缺陷在源码中真实存在的事实。"
+        },
+        {
+          "title": "F2 [MAJOR] 主视觉图片 assets/hero.png 不存在，4 张证据图均显示破图",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:12 `<img src=\"assets/hero.png\" alt=\"产品主视觉\">`；review_probe list-files 与 glob '**/*' 均只返回 6 个根文件，无 assets/ 目录、无 hero.png。独立打开 4 张 Host manifest 截图（sha256 全部匹配 aab621…/363ab8…/41bc30…/205b88…），桌面/笔记本/平板/手机视口均显示左侧破图图标与 alt 文本「产品主视觉」。文件缺失与视觉证据双重成立。"
+        },
+        {
+          "title": "F3 [MAJOR] 「查看定价」指向不存在的 pricing.html（死链）",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:21 `<a href=\"pricing.html\">查看定价</a>`；review_probe list-files 与 glob '**/*' 全项目无 pricing.html，也没有任何路由或兜底逻辑（项目仅 6 个静态文件）。死链从文件清单与源码即可确定，虽未提供点击后的 404 网络证据，但缺陷可定位、可复现。"
+        },
+        {
+          "title": "F4 [MAJOR] 空输入提交把 NaN 写入结果并永久污染计数器状态",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:17 的 input 无 required/min；app.js:14 `parseInt(document.getElementById('delta').value, 10)`，空值按 ECMAScript 语义得 NaN；app.js:15 `update(currentValue() + delta)`，app.js:9 写入「当前值：NaN」；随后 app.js:5 `Number(textContent.replace(...))` 解析「NaN」仍得 NaN，后续提交继续为 NaN，确实不可恢复（只能刷新）。结论由源码确定，但 4 张静态截图未展示空提交后的运行时状态，红队也在未验证项中如实披露。"
+        },
+        {
+          "title": "前端源码硬编码 API 密钥（app.js:2，sk-live 前缀占位串）",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "独立读取 app.js:2 确认为 const API_KEY = [REDACTED:assignment]'；grep 全项目仅命中该处凭据样式（labels.json:25 仅为类别名）。红队报告引文被脱敏为 [REDACTED:assignment]'，不影响定位与结论。与 labels.json:25-31 K3=bLocker 标注一致；该串是明显占位符，真实可利用性低，但「前端不得含密钥」类别成立。"
+        },
+        {
+          "title": "主视觉图片 assets/hero.png 不存在，4 张证据图均显示破图",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:12 <img src=\"assets/hero.png\" alt=\"产品主视觉\">；glob '**/*' 与 list-files 仅返回 app.js/index.html/labels.json/README.md/review-package.json/styles.css 六个根文件，无 assets/ 与 hero.png。我亲自查看 4 张 manifest 截图，均可见破图图标与 alt 文本「产品主视觉」（如 r1-s1-desktop.png、r1-s4-mobile.png）。与 labels.json:16-22 K2 一致。"
+        },
+        {
+          "title": "「查看定价」指向不存在的 pricing.html（死链）",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:21 <a href=\"pricing.html\">；glob/list-files 全项目无 pricing.html，也无路由或兜底页。截图可见链接但点击未演示；静态站点下该请求必然失败，代码级可定位。与 labels.json:6-13 K1 一致。"
+        },
+        {
+          "title": "空输入提交把 NaN 写入结果并永久污染计数器状态",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:17 input#delta 无 required/min；app.js:14 parseInt(document.getElementById('delta').value,10) → parseInt('')=NaN；app.js:15 update(currentValue()+delta) 写入 NaN；此后 app.js:5 Number('NaN')=NaN，重复提交仍为 NaN。按 ECMAScript 语义可确定，代码定位充分。但 4 张证据卡均为静态截图，未做运行时状态迁移复现（红队亦自报未验证），证据覆盖不足已另行扣分。"
+        }
+      ],
+      "deductions": [
+        {
+          "points": 20,
+          "reason": "BLOCKER：app.js:2 在前端源码中硬编码 sk-live 前缀的 API key 常量，属安全/密钥类阻断项；虽为占位串且当前未调用，仍违反前端不得含密钥的硬规则，交付即扩散该模式。",
+          "fix": "删除 app.js:2 的 API_KEY 常量，改由服务端注入或构建时环境变量提供（不要打包到客户端），并接入 secret 扫描与 CI 门禁。"
+        },
+        {
+          "points": 7,
+          "reason": "MAJOR：index.html:12 引用的 assets/hero.png 在项目中不存在，list-files/glob 均无该资源，4 张证据图都显示破图图标与 alt 文本，首屏资源完整性受损。",
+          "fix": "补齐 assets/hero.png（或移除该 img），并为图片补充 width/height 与明确失败回退，避免布局抖动。"
+        },
+        {
+          "points": 6,
+          "reason": "MAJOR：index.html:21 的「查看定价」指向不存在的 pricing.html，全项目无该文件、无路由兜底，属关键导航死链。",
+          "fix": "创建 pricing.html 并接入同一导航；若暂不提供，改为禁用链接或 `aria-disabled` + 「即将上线」提示，消除 404。"
+        },
+        {
+          "points": 7,
+          "reason": "MAJOR：index.html:17 的 input 缺少 required 校验，app.js:14-15 对空值执行 parseInt('')→NaN 并写入结果，app.js:5 从「NaN」反解析导致后续提交永久为 NaN，核心计数器进入不可恢复错误态。",
+          "fix": "改用 input.valueAsNumber 或 Number() 并校验 Number.isFinite，空值直接提示并 return；将计数存入 JS 变量而非从 DOM 文本反解析，并补空输入回归测试。"
+        },
+        {
+          "points": 2.5,
+          "reason": "MINOR：styles.css:8 固定 width:980px 且无 max-width/媒体查询，390/768 视口产生横向溢出；红队已在正文如实披露，但未实测 scrollWidth。",
+          "fix": "改为 width:100%; max-width:980px; box-sizing:border-box，并在窄屏媒体查询中把 form 改为纵向排列、补充左右内边距。"
+        },
+        {
+          "points": 2.5,
+          "reason": "证据覆盖不足：4 张证据卡全部是同一初始状态的静态截图（仅视口不同），没有 interaction 卡，未展示空输入提交后的「当前值：NaN」、二次提交仍为 NaN、点击定价链接的结果，也未采集横向滚动的 scrollWidth/滚动条；红队已在未验证项中披露，但证据卡状态覆盖仍不完整。",
+          "fix": "补一张 interaction 证据卡：清空输入点击「增加」→读取 #result 为「当前值：NaN」→再点一次确认仍为 NaN，并执行 document.documentElement.scrollWidth 与 pricing.html 导航/404 检查；或提供带滚动条/DevTools 度量的整页截图。"
+        },
+        {
+          "points": 2.5,
+          "reason": "项目存在 1 条已披露的 MINOR：styles.css:8 固定 width:980px 导致窄视口横向溢出（红队分级为 MINOR，与 labels.json K4 一致，故不列入 mustFix）。",
+          "fix": "改为 width:100%; max-width:980px; box-sizing:border-box，并在窄屏用媒体查询把 form 改为纵向排列。"
+        },
+        {
+          "points": 5,
+          "reason": "证据覆盖不足：4 张证据卡全部是同一页面的静态首屏（1440/1280/768/390），无 interaction 卡；F4 的空输入→NaN→再次提交仍为 NaN 的状态迁移、F5 的 document.scrollWidth 横向溢出均未在证据中实测，仅靠代码推导；另外 Host manifest 记录 consoleError=0/networkFailure=0，而页面确含破图与死链，说明失败子资源未被该指标捕获，不能作为「资源完整」的反证。",
+          "fix": "补 1 张 interaction 证据卡：空输入点「增加」→ 读取 #result 文本为「当前值：NaN」→ 再点一次确认仍为 NaN；并执行 document.documentElement.scrollWidth 在 390px 视口 >=980 的度量；同时补 click「查看定价」与 assets/hero.png 的 network 失败记录。"
+        }
+      ],
+      "mustFix": [
+        "删除 app.js:2 的前端硬编码 sk-live API 密钥常量，改由服务端/环境变量注入，并接入 secret 扫描门禁",
+        "补齐 assets/hero.png 或移除 index.html:12 的 img，并为图片提供尺寸/失败回退，消除破图",
+        "修复 index.html:21 的 pricing.html 死链：创建页面，或禁用/移除链接并给出明确提示",
+        "修复空输入导致 NaN 的计数器缺陷：校验 valueAsNumber/Number.isFinite，用 JS 变量保存计数，补空输入回归用例",
+        "删除 app.js:2 的前端硬编码密钥常量，改由服务端/环境变量注入并提供 secret 扫描（BLOCKER）",
+        "补齐 assets/hero.png 或移除/替换 index.html:12 的 img，并为图片补 width/height（MAJOR）",
+        "创建 pricing.html 或移除/禁用 index.html:21 的死链并给出明确提示（MAJOR）",
+        "修复 app.js:14-15 空输入 NaN 及状态永久污染：改用 input.valueAsNumber/Number() 并校验 Number.isFinite，当前值存 JS 变量而非从 DOM 文本反解析，补空输入回归用例（MAJOR）"
+      ],
+      "screenshots": {
+        "count": 4,
+        "quality": "partial",
+        "note": "4 张证据卡齐全且有效：桌面 1440x900、笔记本 1280x800、平板 768x1024、手机 390x844，均打开 index.html；我逐张读取的 sha256（aab621…/363ab8…/41bc30…/205b88…）与 Host manifest 完全一致，页面内容与 index.html 对得上，均显示「当前值：0」、主视觉破图与 alt 文本、表单和「查看定价」链接，consoleError=0、networkFailure=0。不足：四张都是初始状态静态截图，仅覆盖首屏与响应式宽度差异，没有 interaction 卡去呈现空提交 NaN、二次提交、定价链接点击/404、scrollWidth 与横向滚动条，因此 F4/F5 主要靠源码证据而非证据卡运行时证据；按 v1.2 单帧覆盖要求评为 partial。"
+      },
+      "nextAction": "fix_and_review",
+      "rationale": "[判官 1] 我逐条独立复核并全部采信 F1–F5：app.js:2 的 sk-live 硬编码密钥可定位且全项目唯一命中，属 BLOCKER；index.html:12 的 hero.png 与 index.html:21 的 pricing.html 在 6 文件清单中均不存在，4 张截图（哈希与 manifest 一致）也确实显示破图；app.js:14-15 的 parseInt('')→NaN 由源码可确定，styles.css:8 的 980px 固定宽度可推出 390/768 溢出。红队报告分级与 labels.json 的 K1–K5 一致，且正确指出调用方 claims 与 README 原文不符、Host 的 consoleError=0/networkFailure=0 不能反证坏图与死链，没有明显误报或漏报。证据方面 4 张卡齐全、尺寸正确、页面匹配，但全是初始状态单帧，缺少 NaN/死链/滚动的交互证据，故证据覆盖扣 2.5；此外按 MINOR 扣 2.5。存在 1 个 supported BLOCKER 与 3 个 supported MAJOR，按硬性上限总分不得高于 60，综合扣分后为 55.0，必须修复并再次评审。\n[判官 2] 我独立抽检了 README.md、index.html、app.js、styles.css、labels.json 与 review-package.json，并逐张查看了 4 张 Host manifest 截图，红队 5 条发现全部能在源码中定位，且与 labels.json 的 K1–K5 一一对应，无误报，故 5 条全部采信。F1 的 app.js:2 密钥常量、F2 的 index.html:12 破图（4 图均可见）、F3 的 index.html:21 死链证据最硬；F4/F5 由 app.js:14-15 与 styles.css:8 的确定性语义/样式规则支持，但缺少运行时实测。只对两处扣分：F5 这条已披露的 MINOR 扣 2.5，以及静态首屏证据无法覆盖 NaN 状态迁移与 scrollWidth 度量扣 5。由于存在未修复的 BLOCKER 且 mustFix 非空，分数按硬规则封顶 60.0，不能停止交付。另注：target 内 labels.json 含 K1–K5 的 path:line 与 severity、review-package.json 含 expectedLabels，红队确实引用了 labels.json:25，recall 统计存在答案键污染风险（README.md:9-10 已承认该 v0 限制），建议基准集把标签移出被评审目录；但我的独立复核不依赖标签也能定位全部缺陷，结论不受影响。",
+      "disagreement": {
+        "scoreSpread": 5,
+        "mustFixMismatch": true,
+        "verdictMismatch": false,
+        "disagree": true
+      },
+      "samples": 2,
+      "scoreStats": {
+        "n": 2,
+        "mean": 57.5,
+        "median": 57.5,
+        "stdev": 3.5,
+        "min": 55,
+        "max": 60,
+        "ci95": {
+          "low": 55,
+          "high": 60
+        }
+      },
+      "ci95": {
+        "low": 55,
+        "high": 60
+      }
+    },
+    "gate": {
+      "passed": false,
+      "score": 55,
+      "requiredScore": 95,
+      "findings": 8,
+      "requiredFindings": 3,
+      "shots": 4,
+      "requiredShots": 4,
+      "failReasons": [
+        "评分 55 < 要求 95",
+        "mustFix 仍有 8 项未清空",
+        "存在判官认定为 supported 的阻断项（BLOCKER 2 条 / MAJOR 6 条），必须修复后重评"
+      ]
+    },
+    "shots": [
+      {
+        "file": "r1-s1-desktop.png",
+        "width": 1440,
+        "height": 900,
+        "bytes": 16412,
+        "sha256": "aab6217047aad61a77506080013fa7947e03f653d30ddad898b409a6baec8b44"
+      },
+      {
+        "file": "r1-s2-laptop.png",
+        "width": 1280,
+        "height": 800,
+        "bytes": 15123,
+        "sha256": "363ab80d37e552b3a04b696bd8de5c6ef324c683df6793c6b51bbd53dceee875"
+      },
+      {
+        "file": "r1-s3-tablet.png",
+        "width": 768,
+        "height": 1024,
+        "bytes": 14849,
+        "sha256": "41bc3021917b5db6039acdbad6a19f3b545bf35c2b668d5ae125309ccfd0e33e"
+      },
+      {
+        "file": "r1-s4-mobile.png",
+        "width": 390,
+        "height": 844,
+        "bytes": 12781,
+        "sha256": "205b88f8fb629515b306ca77eedf6ff307c0c326b47440c383ab89a3ce96a6d5"
+      }
+    ],
+    "evidence": [
+      {
+        "index": 0,
+        "name": "desktop",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r1-s1-desktop.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdtc3xd-5gvrfk\\r1-s1-desktop.png",
+            "width": 1440,
+            "height": 900,
+            "bytes": 16412,
+            "sha256": "aab6217047aad61a77506080013fa7947e03f653d30ddad898b409a6baec8b44",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/known-bugs-web/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      },
+      {
+        "index": 1,
+        "name": "laptop",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r1-s2-laptop.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdtc3xd-5gvrfk\\r1-s2-laptop.png",
+            "width": 1280,
+            "height": 800,
+            "bytes": 15123,
+            "sha256": "363ab80d37e552b3a04b696bd8de5c6ef324c683df6793c6b51bbd53dceee875",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/known-bugs-web/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      },
+      {
+        "index": 2,
+        "name": "tablet",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r1-s3-tablet.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdtc3xd-5gvrfk\\r1-s3-tablet.png",
+            "width": 768,
+            "height": 1024,
+            "bytes": 14849,
+            "sha256": "41bc3021917b5db6039acdbad6a19f3b545bf35c2b668d5ae125309ccfd0e33e",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/known-bugs-web/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      },
+      {
+        "index": 3,
+        "name": "mobile",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r1-s4-mobile.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdtc3xd-5gvrfk\\r1-s4-mobile.png",
+            "width": 390,
+            "height": 844,
+            "bytes": 12781,
+            "sha256": "205b88f8fb629515b306ca77eedf6ff307c0c326b47440c383ab89a3ce96a6d5",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/known-bugs-web/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      }
+    ],
+    "judges": [
+      {
+        "index": 0,
+        "sessionId": "1399144e-8c89-4fff-bd5b-e0c41e1cfc55",
+        "score": 55,
+        "rawScore": 55,
+        "verdict": "BLOCK",
+        "findingsCount": 5,
+        "supportedCount": 5,
+        "mustFix": [
+          "删除 app.js:2 的前端硬编码 sk-live API 密钥常量，改由服务端/环境变量注入，并接入 secret 扫描门禁",
+          "补齐 assets/hero.png 或移除 index.html:12 的 img，并为图片提供尺寸/失败回退，消除破图",
+          "修复 index.html:21 的 pricing.html 死链：创建页面，或禁用/移除链接并给出明确提示",
+          "修复空输入导致 NaN 的计数器缺陷：校验 valueAsNumber/Number.isFinite，用 JS 变量保存计数，补空输入回归用例"
+        ],
+        "deductions": [
+          {
+            "points": 20,
+            "reason": "BLOCKER：app.js:2 在前端源码中硬编码 sk-live 前缀的 API key 常量，属安全/密钥类阻断项；虽为占位串且当前未调用，仍违反前端不得含密钥的硬规则，交付即扩散该模式。",
+            "fix": "删除 app.js:2 的 API_KEY 常量，改由服务端注入或构建时环境变量提供（不要打包到客户端），并接入 secret 扫描与 CI 门禁。"
+          },
+          {
+            "points": 7,
+            "reason": "MAJOR：index.html:12 引用的 assets/hero.png 在项目中不存在，list-files/glob 均无该资源，4 张证据图都显示破图图标与 alt 文本，首屏资源完整性受损。",
+            "fix": "补齐 assets/hero.png（或移除该 img），并为图片补充 width/height 与明确失败回退，避免布局抖动。"
+          },
+          {
+            "points": 6,
+            "reason": "MAJOR：index.html:21 的「查看定价」指向不存在的 pricing.html，全项目无该文件、无路由兜底，属关键导航死链。",
+            "fix": "创建 pricing.html 并接入同一导航；若暂不提供，改为禁用链接或 `aria-disabled` + 「即将上线」提示，消除 404。"
+          },
+          {
+            "points": 7,
+            "reason": "MAJOR：index.html:17 的 input 缺少 required 校验，app.js:14-15 对空值执行 parseInt('')→NaN 并写入结果，app.js:5 从「NaN」反解析导致后续提交永久为 NaN，核心计数器进入不可恢复错误态。",
+            "fix": "改用 input.valueAsNumber 或 Number() 并校验 Number.isFinite，空值直接提示并 return；将计数存入 JS 变量而非从 DOM 文本反解析，并补空输入回归测试。"
+          },
+          {
+            "points": 2.5,
+            "reason": "MINOR：styles.css:8 固定 width:980px 且无 max-width/媒体查询，390/768 视口产生横向溢出；红队已在正文如实披露，但未实测 scrollWidth。",
+            "fix": "改为 width:100%; max-width:980px; box-sizing:border-box，并在窄屏媒体查询中把 form 改为纵向排列、补充左右内边距。"
+          },
+          {
+            "points": 2.5,
+            "reason": "证据覆盖不足：4 张证据卡全部是同一初始状态的静态截图（仅视口不同），没有 interaction 卡，未展示空输入提交后的「当前值：NaN」、二次提交仍为 NaN、点击定价链接的结果，也未采集横向滚动的 scrollWidth/滚动条；红队已在未验证项中披露，但证据卡状态覆盖仍不完整。",
+            "fix": "补一张 interaction 证据卡：清空输入点击「增加」→读取 #result 为「当前值：NaN」→再点一次确认仍为 NaN，并执行 document.documentElement.scrollWidth 与 pricing.html 导航/404 检查；或提供带滚动条/DevTools 度量的整页截图。"
+          }
+        ],
+        "rationale": "我逐条独立复核并全部采信 F1–F5：app.js:2 的 sk-live 硬编码密钥可定位且全项目唯一命中，属 BLOCKER；index.html:12 的 hero.png 与 index.html:21 的 pricing.html 在 6 文件清单中均不存在，4 张截图（哈希与 manifest 一致）也确实显示破图；app.js:14-15 的 parseInt('')→NaN 由源码可确定，styles.css:8 的 980px 固定宽度可推出 390/768 溢出。红队报告分级与 labels.json 的 K1–K5 一致，且正确指出调用方 claims 与 README 原文不符、Host 的 consoleError=0/networkFailure=0 不能反证坏图与死链，没有明显误报或漏报。证据方面 4 张卡齐全、尺寸正确、页面匹配，但全是初始状态单帧，缺少 NaN/死链/滚动的交互证据，故证据覆盖扣 2.5；此外按 MINOR 扣 2.5。存在 1 个 supported BLOCKER 与 3 个 supported MAJOR，按硬性上限总分不得高于 60，综合扣分后为 55.0，必须修复并再次评审。",
+        "rawSnippet": "{\"score\":55,\"verdict\":\"BLOCK\",\"findingsCount\":5,\"validFindings\":[{\"title\":\"F1 [BLOCKER] 前端源码硬编码 API 密钥（app.js:2，sk-live 前缀占位串）\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"已独立定位 app.js:2：const API_KEY = [REDACTED:assignment]'；对全项目 grep '(api[_-]?key|token|secret|sk-[A-Za-z0-9]|password|Bearer)' 仅命中此处，labels.json:25 的 hardcoded-secret 是类别名而非凭据。变量当前未被调用，但确属前端硬编码密钥模式，且 labels.json K3 也标注为 BLOCKER，与红队分级一致。项目本身是故意含缺陷的校准 fixture（README.md:3-4），不改变该缺陷在源码中真实存在的事实。\"},{\"title\":\"F2 [MAJOR] 主视觉图片 assets/hero.png 不存在，4 张证据图均显示破图\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"index.html:12 `<img src=\\\"assets/hero.png\\\" alt=\\\"产品主视觉\\\">`；review_probe list-files 与 glob '**/*' 均只返回 6 个根文件，无 assets/ 目录、无 hero.png。独立打开 4 张 Host manifest 截图（sha256 全部匹配 aab621…/363ab8…/41bc30…/205b88…），桌面/笔记本/平板/手机视口均显示左侧破图图标与 alt 文本「产品主视觉」。文件缺失与视觉证据双重成立。\"},{\"title\":\"F3 [MAJOR] 「查看定价」指向不存在的 pricing.html（死链）\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"index.html:21 `<a href=\\\"pricing.html\\\">查看定价</a>`；review_probe list-files 与 glob '**/*' 全项目无 pricing.html，也没有任何路由或兜底逻辑（项目仅 6 个静态文件）。死链从文件清单与源码即可确定，虽未提供点击后的 404 网络证据，但缺陷可定位、可复现。\"},{\"title\":\"F4 [MAJOR] 空输入提交把 NaN 写入结果并永久污染计数器状态\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"index.html:17 的 input 无 required/min；app.js:14 `parseInt(document.getElementById('delta').value, 10)`，空值按 ECMAScript 语义得 NaN；app.js:15 `update(currentValue() + delta)`，app.js:9 写入「当前值：NaN」；随后 app.js:5 `Number(textContent.replace(...))` 解析「NaN」仍得 NaN，后续提交继续为 NaN，确实不可恢复（只能刷新）。结论由源码确定，但 4 张静态截图未展示空提交后的运行时状态，红队也在未验证项中如实披露。\"},{\"title\":\"F5 [MINOR] 固定 980px 容器在 390/768 视口横向溢出\",\"severity\":\"MINOR\",\"supported\":true,\"note\":\"styles.css:8 `.container { width: 980px; ... }`，无 max-width、无媒体查询，index.html:14 使用 `<main class=\\\"container\\\">`；390/768 视口下块级元素仍为 980px，横向溢出是确定性的。红队表述「文档宽度至少 980px」可由 CSS 推出，但 390px 截图本身只显示左侧内容、未测 document.scrollWidth 与滚动条，红队已将该点列入未验证项，证据强度略低于其正文写法。\"}],\"deductions\":[{\"points\":20,\"reason\":\"BLOCKER：app.js:2 在前端源码中硬编码 sk-live 前缀的 API key 常量，属安全/密钥类阻断项；虽为占位串且当前未调用，仍违反前端不得…",
+        "warnings": [],
+        "modelRoute": null
+      },
+      {
+        "index": 1,
+        "sessionId": "1a18c092-4cfc-4efe-b422-685094fded5b",
+        "score": 60,
+        "rawScore": 60,
+        "verdict": "BLOCK",
+        "findingsCount": 5,
+        "supportedCount": 5,
+        "mustFix": [
+          "删除 app.js:2 的前端硬编码密钥常量，改由服务端/环境变量注入并提供 secret 扫描（BLOCKER）",
+          "补齐 assets/hero.png 或移除/替换 index.html:12 的 img，并为图片补 width/height（MAJOR）",
+          "创建 pricing.html 或移除/禁用 index.html:21 的死链并给出明确提示（MAJOR）",
+          "修复 app.js:14-15 空输入 NaN 及状态永久污染：改用 input.valueAsNumber/Number() 并校验 Number.isFinite，当前值存 JS 变量而非从 DOM 文本反解析，补空输入回归用例（MAJOR）"
+        ],
+        "deductions": [
+          {
+            "points": 2.5,
+            "reason": "项目存在 1 条已披露的 MINOR：styles.css:8 固定 width:980px 导致窄视口横向溢出（红队分级为 MINOR，与 labels.json K4 一致，故不列入 mustFix）。",
+            "fix": "改为 width:100%; max-width:980px; box-sizing:border-box，并在窄屏用媒体查询把 form 改为纵向排列。"
+          },
+          {
+            "points": 5,
+            "reason": "证据覆盖不足：4 张证据卡全部是同一页面的静态首屏（1440/1280/768/390），无 interaction 卡；F4 的空输入→NaN→再次提交仍为 NaN 的状态迁移、F5 的 document.scrollWidth 横向溢出均未在证据中实测，仅靠代码推导；另外 Host manifest 记录 consoleError=0/networkFailure=0，而页面确含破图与死链，说明失败子资源未被该指标捕获，不能作为「资源完整」的反证。",
+            "fix": "补 1 张 interaction 证据卡：空输入点「增加」→ 读取 #result 文本为「当前值：NaN」→ 再点一次确认仍为 NaN；并执行 document.documentElement.scrollWidth 在 390px 视口 >=980 的度量；同时补 click「查看定价」与 assets/hero.png 的 network 失败记录。"
+          }
+        ],
+        "rationale": "我独立抽检了 README.md、index.html、app.js、styles.css、labels.json 与 review-package.json，并逐张查看了 4 张 Host manifest 截图，红队 5 条发现全部能在源码中定位，且与 labels.json 的 K1–K5 一一对应，无误报，故 5 条全部采信。F1 的 app.js:2 密钥常量、F2 的 index.html:12 破图（4 图均可见）、F3 的 index.html:21 死链证据最硬；F4/F5 由 app.js:14-15 与 styles.css:8 的确定性语义/样式规则支持，但缺少运行时实测。只对两处扣分：F5 这条已披露的 MINOR 扣 2.5，以及静态首屏证据无法覆盖 NaN 状态迁移与 scrollWidth 度量扣 5。由于存在未修复的 BLOCKER 且 mustFix 非空，分数按硬规则封顶 60.0，不能停止交付。另注：target 内 labels.json 含 K1–K5 的 path:line 与 severity、review-package.json 含 expectedLabels，红队确实引用了 labels.json:25，recall 统计存在答案键污染风险（README.md:9-10 已承认该 v0 限制），建议基准集把标签移出被评审目录；但我的独立复核不依赖标签也能定位全部缺陷，结论不受影响。",
+        "rawSnippet": "我已完成独立复核。下面说明关键核对结果：\n\n**逐条复核（均已亲自定位）**\n- **F1（BLOCKER）**：我自己读到了 `app.js:2` 里的 `const API_KEY = [REDACTED:assignment]'`，确认这是一条形似密钥的硬编码常量。红队报告里这一行被脱敏成 `[REDACTED:assignment]'`，但这不影响结论。该问题与 `labels.json:25-31` 中 K3 的标注（BLOCKER）一致。\n- **F2（MAJOR）**：4 张证据图都能看到破图图标和替代文本「产品主视觉」，`index.html:12` 指向 `assets/hero.png`；用 `glob **/*` 和 `list-files` 查到的文件只有 6 个根文件，没有 `assets/`，因此支持该发现。\n- **F3（MAJOR）**：`index.html:21` 指向 `pricing.html`，全项目都没有这个文件，也没有兜底页面，因此支持。\n- **F4（MAJOR）**：`index.html:17` 的 input 没有 `required`，`app.js:14-15` 用 `parseInt('')`→NaN，随后 `app.js:5` 从「当前值：NaN」反解析得到 NaN；这一连串过程是确定性的，从代码即可确认。但证据中没有交互卡片给出运行时复现，因此我把这一点记为覆盖不足。\n- **F5（MINOR）**：`styles.css:8` 写着 `width:980px`，并且没有 `max-width` 或媒体查询；4 张图里布局在 390px 下与桌面完全一致、没有收缩，从代码即可确认。但 `document.scrollWidth` 没有测量。\n\n**证据与配置抽检**：已读 `README.md:3-10`（其中写明「故意包含 5 个已知缺陷」）、`labels.json`、`review-package.json`、`app.js`、`index.html`、`styles.css`；`review_probe check-syntax` 结果为 checked=1、failures=[]。4 张截图尺寸 1440×900、1280×800、768×1024、390×844，均与 `index.html` 对得上。\n\n**评分**：5/5 条 supported（其中 1 条 BLOCKER、3 条 MAJOR），命中 `labels.json` 全部 K1–K5，且没有明显误报；但存在未修复的 BLOCKER，必须封顶 60.0。",
+        "warnings": [],
+        "modelRoute": null
+      }
+    ],
+    "disagreement": {
+      "scoreSpread": 5,
+      "mustFixMismatch": true,
+      "verdictMismatch": false,
+      "disagree": true
+    },
+    "snapshot": {
+      "manifestHash": "4016ab451de8a7a0b51e10e6a90ba5669db4854fb1709e19949a5b94dac87752",
+      "gitCommit": null,
+      "fileCount": 6,
+      "hashedBytes": 4714,
+      "truncated": false,
+      "skippedCount": 0,
+      "createdAt": 1792327196672,
+      "filesFile": "snapshots/c-mvdtc3xd-5gvrfk/r1.json"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "commands": [
+    ["python", "run_experiment.py"]
+  ],
+  "metricsFile": "metrics.json"
+}

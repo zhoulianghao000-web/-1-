@@ -1,0 +1,61 @@
+{
+  "fixture": "game-idle",
+  "description": "v2.0 校准语料 game-idle：4 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "GA4-1",
+      "category": "hardcoded-secret",
+      "severity": "BLOCKER",
+      "path": "assets/game.js",
+      "line": 6,
+      "lines": [
+        6,
+        9
+      ],
+      "description": "游戏脚本硬编码 API key（sk-corpus-…）并生成 Bearer 认证头，凭据暴露在客户端"
+    },
+    {
+      "id": "GA4-2",
+      "category": "state-clamp",
+      "severity": "MAJOR",
+      "path": "assets/game.js",
+      "line": 36,
+      "lines": [
+        36
+      ],
+      "description": "攻击后 state.hp 直接相减、没有 Math.max 下限钳制，HP 可以变成负数"
+    },
+    {
+      "id": "GA4-3",
+      "category": "off-by-one",
+      "severity": "MAJOR",
+      "path": "assets/game.js",
+      "line": 37,
+      "lines": [
+        37
+      ],
+      "description": "循环条件使用 <= LOOT_TABLE.length，最后一次迭代访问 LOOT_TABLE[length] 为 undefined，攻击时抛 TypeError"
+    },
+    {
+      "id": "GA4-4",
+      "category": "broken-image",
+      "severity": "MAJOR",
+      "path": "index.html",
+      "line": 19,
+      "lines": [
+        19
+      ],
+      "description": "Boss 图片引用 assets/img/boss-missing.png，但文件不存在，坏图留在 DOM 中"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "GA4-1",
+      "GA4-2",
+      "GA4-3",
+      "GA4-4"
+    ]
+  }
+}

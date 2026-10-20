@@ -1,0 +1,48 @@
+{
+  "fixture": "game-clicker",
+  "description": "v2.0 校准语料 game-clicker：3 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "GA1-1",
+      "category": "restart-softlock",
+      "severity": "BLOCKER",
+      "path": "assets/game.js",
+      "line": 39,
+      "lines": [
+        39
+      ],
+      "description": "重开按钮调用未定义的 resetGame()，点击后抛 ReferenceError，游戏停在结束/不可玩状态（软锁）"
+    },
+    {
+      "id": "GA1-2",
+      "category": "state-clamp",
+      "severity": "MAJOR",
+      "path": "assets/game.js",
+      "line": 30,
+      "lines": [
+        30
+      ],
+      "description": "攻击后 state.hp 直接相减、没有 Math.max 下限钳制，HP 可以变成负数"
+    },
+    {
+      "id": "GA1-3",
+      "category": "broken-image",
+      "severity": "MAJOR",
+      "path": "index.html",
+      "line": 19,
+      "lines": [
+        19
+      ],
+      "description": "Boss 图片引用 assets/img/boss-missing.png，但文件不存在，坏图留在 DOM 中"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "GA1-1",
+      "GA1-2",
+      "GA1-3"
+    ]
+  }
+}

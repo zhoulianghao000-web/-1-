@@ -1,0 +1,127 @@
+{
+  "fixture": "modeling-seeded",
+  "description": "v1.2 建模基准靶子：8 个已知种子缺陷（2 BLOCKER + 6 MAJOR），供 runner.mjs 计算 recall / precision；所有行号已用 Select-String 核对。",
+  "labels": [
+    {
+      "id": "M1",
+      "category": "data-leakage",
+      "severity": "BLOCKER",
+      "path": "model.py",
+      "line": 155,
+      "lines": [
+        155,
+        156,
+        157
+      ],
+      "description": "特征选择与标准化在 train/test 划分之前用全量 rows（含测试样本）拟合：select_features(rows) 用全量标签做相关性筛选、fit_scaler(rows) 用全量统计量做标准化，测试集信息泄漏进训练流程，测试指标被高估"
+    },
+    {
+      "id": "M2",
+      "category": "temporal-leakage",
+      "severity": "BLOCKER",
+      "path": "model.py",
+      "line": 87,
+      "lines": [
+        84,
+        86,
+        87
+      ],
+      "description": "数据按采集时间（timestamp）严格递增且流失率随时间漂移，但 split_rows() 用 rng.shuffle 随机打乱后再做 75/25 划分：未来样本进入训练集，时间外推评估失效（时序泄漏）"
+    },
+    {
+      "id": "M3",
+      "category": "metric-mismatch",
+      "severity": "MAJOR",
+      "path": "README.md",
+      "line": 46,
+      "lines": [
+        46,
+        47,
+        48
+      ],
+      "description": "README 宣称测试集 accuracy 0.95、precision 0.94、recall 0.96、F1 0.95，但 metrics.json 实测 accuracy 0.85、precision 0.8511、recall 0.8333、F1 0.8421（约差 10 个百分点）；报告与论文表格同样使用 0.95"
+    },
+    {
+      "id": "M4",
+      "category": "missing-baseline",
+      "severity": "MAJOR",
+      "path": "paper.md",
+      "line": 54,
+      "lines": [
+        10,
+        11,
+        54,
+        55
+      ],
+      "description": "论文声称优于未正则化 logistic-regression baseline 8.0 个 accuracy 点（baseline 0.87），但仓库没有任何 baseline 实现、脚本或指标文件，baseline 数字无来源，也没有与 SOTA 的对比实验"
+    },
+    {
+      "id": "M5",
+      "category": "non-reproducible",
+      "severity": "MAJOR",
+      "path": "run_experiment.py",
+      "line": 22,
+      "lines": [
+        19,
+        22,
+        23,
+        24
+      ],
+      "description": "run_experiment.py 默认用无种子的 random.Random() 生成随机划分；不传 --seed 时连续两次 python run_experiment.py 写出的 metrics.json 不同，与 README/论文的「可复现」宣称矛盾"
+    },
+    {
+      "id": "M6",
+      "category": "figure-inconsistency",
+      "severity": "MAJOR",
+      "path": "make_figures.py",
+      "line": 19,
+      "lines": [
+        19,
+        146,
+        164,
+        176,
+        221
+      ],
+      "description": "make_figures.py 用硬编码 REPORTED = {accuracy: 0.95, precision: 0.94, recall: 0.96, f1: 0.95} 生成 figures/metrics-chart.png，而 report.html 与 metrics.json 的实测是 accuracy 0.85 / F1 0.8421：图表数字与表格不一致"
+    },
+    {
+      "id": "M7",
+      "category": "feature-id-leakage",
+      "severity": "MAJOR",
+      "path": "model.py",
+      "line": 17,
+      "lines": [
+        17
+      ],
+      "description": "FEATURE_POOL 把行号 row_id 当作数值特征参与特征选择与训练；数据按时间排序且标签随 row_id 漂移，模型可用行号/顺序信息泄漏标签（ID 特征泄漏）"
+    },
+    {
+      "id": "M8",
+      "category": "missing-significance",
+      "severity": "MAJOR",
+      "path": "paper.md",
+      "line": 56,
+      "lines": [
+        55,
+        56,
+        57,
+        58
+      ],
+      "description": "论文声称相对 baseline 的提升统计显著（p < 0.05，paired bootstrap），但仓库没有任何显著性检验代码、无置信区间、无重复实验方差，p 值与「bootstrap 检验」无来源，且与单一随机划分矛盾"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M5",
+      "M6",
+      "M7",
+      "M8"
+    ]
+  }
+}

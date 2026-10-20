@@ -1,0 +1,49 @@
+{
+  "fixture": "web-signup",
+  "description": "v2.0 校准语料 web-signup：3 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "W2-1",
+      "category": "hardcoded-secret",
+      "severity": "BLOCKER",
+      "path": "assets/app.js",
+      "line": 4,
+      "lines": [
+        4,
+        7
+      ],
+      "description": "前端 app.js 硬编码 API key（sk-corpus-…）并生成 Bearer 认证头，凭据直接暴露给浏览器"
+    },
+    {
+      "id": "W2-2",
+      "category": "missing-alt",
+      "severity": "MINOR",
+      "path": "index.html",
+      "line": 18,
+      "lines": [
+        18
+      ],
+      "description": "相册图片没有 alt 属性，读屏软件无法描述图片内容"
+    },
+    {
+      "id": "W2-3",
+      "category": "mobile-overflow",
+      "severity": "MINOR",
+      "path": "assets/styles.css",
+      "line": 23,
+      "lines": [
+        23
+      ],
+      "description": ".panel 固定 width:980px，390px 移动端页面出现横向溢出"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "W2-1",
+      "W2-2",
+      "W2-3"
+    ]
+  }
+}

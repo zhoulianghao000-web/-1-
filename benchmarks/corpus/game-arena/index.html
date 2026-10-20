@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>竞技场试炼 · v0.1</title>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="assets/game.js" defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hud">
+      <div class="hud-item"><span>HP</span><strong id="hp">100</strong></div>
+      <div class="hud-item"><span>分数</span><strong id="score">0</strong></div>
+    </header>
+    <main class="panel">
+      <h1>竞技场试炼 · v0.1</h1>
+      <p class="tagline">在回合制竞技场里挑战守卫。</p>
+      <img class="boss-image" src="assets/img/boss-missing.png" alt="Boss 立绘">
+      <p class="status" id="status">点击开始进入战斗。</p>
+      <div class="controls">
+        <button type="button" class="btn btn-primary" id="start">开始</button>
+        <button type="button" class="btn btn-danger" id="attack" disabled>攻击</button>
+        <button type="button" class="btn btn-ghost" id="restart">重开</button>
+      </div>
+    </main>
+    <footer class="footer">© 2026 竞技场试炼 · 离线演示小游戏</footer>
+  </div>
+</body>
+</html>

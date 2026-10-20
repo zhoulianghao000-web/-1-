@@ -1,0 +1,431 @@
+/* ==========================================================================
+   月影竞技场 Lunar Arena · v0.9.1
+   深色夜幕 + 月辉金 / 幽紫的界面，纯本地样式，无外部字体与图片。
+   ========================================================================== */
+
+:root {
+  --bg-0: #0e0b18;
+  --bg-1: #171228;
+  --bg-2: #211a38;
+  --line: rgba(238, 219, 168, 0.16);
+  --line-strong: rgba(238, 219, 168, 0.34);
+  --text: #f4eefb;
+  --muted: #a99ec6;
+  --muted-2: #8f85ad;
+  --gold: #e8c37a;
+  --gold-2: #f7e7bf;
+  --violet: #8b6cf0;
+  --danger: #f08fa0;
+  --ok: #7ad8a5;
+  --radius: 18px;
+  --font: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.6;
+  background-color: var(--bg-0);
+  background-image:
+    radial-gradient(900px 520px at 18% -10%, rgba(139, 108, 240, 0.28), transparent 62%),
+    radial-gradient(700px 420px at 88% 0%, rgba(232, 195, 122, 0.12), transparent 60%);
+  background-attachment: fixed;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+.arena {
+  width: min(1180px, 100% - 48px);
+  margin: 0 auto;
+  padding: 28px 0 46px;
+}
+
+/* ---------- 顶部状态栏 ---------- */
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(120deg, rgba(33, 26, 56, 0.92), rgba(14, 11, 24, 0.86));
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.brand-mark {
+  font-size: 22px;
+  color: var(--gold-2);
+  text-shadow: 0 0 18px rgba(232, 195, 122, 0.55);
+}
+
+.brand-name {
+  font-size: 20px;
+  letter-spacing: 0.16em;
+  color: var(--gold-2);
+}
+
+.version {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--muted-2);
+}
+
+.hud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+}
+
+.hud-item {
+  min-width: 88px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(14, 11, 24, 0.6);
+  text-align: center;
+}
+
+.hud-item dt {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--muted-2);
+}
+
+.hud-item dd {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold-2);
+}
+
+/* ---------- 布局 ---------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 22px;
+  margin-top: 22px;
+  align-items: start;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(33, 26, 56, 0.7), rgba(14, 11, 24, 0.9));
+  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.3);
+}
+
+.stage {
+  position: relative;
+  padding: 26px;
+}
+
+.stage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.stage-head h1 {
+  font-size: 22px;
+  color: var(--gold-2);
+}
+
+.drop-rate {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.drop-rate strong {
+  color: var(--gold-2);
+}
+
+/* ---------- 敌人 ---------- */
+
+.enemy {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: radial-gradient(420px 260px at 24% 40%, rgba(139, 108, 240, 0.2), transparent 70%);
+}
+
+.enemy-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 18px 34px rgba(0, 0, 0, 0.45));
+}
+
+.enemy-meta h2 {
+  font-size: 19px;
+  color: var(--text);
+}
+
+.bar {
+  height: 12px;
+  margin: 14px 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(14, 11, 24, 0.8);
+}
+
+.bar-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #b06c7f, #f08fa0);
+  transition: width 0.2s ease;
+}
+
+.enemy-hp {
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 按钮 ---------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn {
+  padding: 12px 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(14, 11, 24, 0.6);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--gold);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--gold-2);
+  outline-offset: 3px;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  border-color: rgba(232, 195, 122, 0.6);
+  background: linear-gradient(135deg, #f7e7bf, #c99a4a);
+  color: #211a38;
+}
+
+.btn-danger {
+  border-color: rgba(240, 143, 160, 0.55);
+  background: linear-gradient(135deg, #b05068, #7c3348);
+  color: #fff2f5;
+}
+
+.btn-ghost {
+  color: var(--muted);
+}
+
+.status {
+  min-height: 22px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted-2);
+}
+
+/* ---------- 游戏结束覆盖层 ---------- */
+
+.gameover {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  border-radius: var(--radius);
+  background: rgba(9, 7, 15, 0.9);
+  text-align: center;
+  backdrop-filter: blur(6px);
+}
+
+.gameover[hidden] {
+  display: none;
+}
+
+.gameover h2 {
+  font-size: 30px;
+  color: var(--danger);
+  letter-spacing: 0.08em;
+}
+
+.gameover p {
+  color: var(--muted);
+}
+
+.gameover .btn {
+  margin-top: 8px;
+}
+
+/* ---------- 侧栏 ---------- */
+
+.side {
+  display: grid;
+  gap: 22px;
+}
+
+.side .panel {
+  padding: 20px;
+}
+
+.side h2 {
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.loot {
+  text-align: center;
+}
+
+.loot-art {
+  display: block;
+  width: 100%;
+  height: 150px;
+  margin: 14px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    radial-gradient(220px 120px at 50% 20%, rgba(232, 195, 122, 0.18), transparent 70%),
+    rgba(14, 11, 24, 0.7);
+  object-fit: cover;
+}
+
+.loot-name {
+  font-size: 16px;
+  color: var(--gold-2);
+}
+
+.loot-desc {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--muted-2);
+}
+
+.log {
+  display: grid;
+  gap: 6px;
+  max-height: 300px;
+  margin: 14px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.log li {
+  padding: 8px 10px;
+  border: 1px solid rgba(238, 219, 168, 0.1);
+  border-radius: 10px;
+  background: rgba(14, 11, 24, 0.55);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---------- 页脚 ---------- */
+
+.footer {
+  margin-top: 26px;
+  font-size: 12px;
+  color: var(--muted-2);
+  text-align: center;
+}
+
+/* ---------- 响应式 ---------- */
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .enemy {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .enemy-art {
+    max-width: 260px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .arena {
+    width: calc(100% - 32px);
+    padding-top: 16px;
+  }
+
+  .hud {
+    gap: 8px;
+  }
+
+  .hud-item {
+    flex: 1 1 40%;
+  }
+
+  .stage {
+    padding: 18px;
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "fixture": "web-dashboard",
+  "description": "v2.0 校准语料 web-dashboard：4 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "W5-1",
+      "category": "mobile-overflow",
+      "severity": "MINOR",
+      "path": "assets/styles.css",
+      "line": 23,
+      "lines": [
+        23
+      ],
+      "description": ".panel 固定 width:980px，390px 移动端页面出现横向溢出"
+    },
+    {
+      "id": "W5-2",
+      "category": "duplicate-id",
+      "severity": "MINOR",
+      "path": "index.html",
+      "line": 19,
+      "lines": [
+        19,
+        20
+      ],
+      "description": "页面出现两个 id=\"status\" 元素，getElementById 行为不确定，HTML 重复 id 校验失败"
+    },
+    {
+      "id": "W5-3",
+      "category": "false-test-claim",
+      "severity": "MINOR",
+      "path": "README.md",
+      "line": 9,
+      "lines": [
+        9
+      ],
+      "description": "README 宣称自动化测试全部通过，但仓库没有任何测试文件、测试脚本或 CI 配置"
+    },
+    {
+      "id": "W5-4",
+      "category": "undefined-function",
+      "severity": "MAJOR",
+      "path": "assets/app.js",
+      "line": 10,
+      "lines": [
+        10
+      ],
+      "description": "按钮点击处理调用未定义的 refreshStats()，点击后抛 ReferenceError，状态更新中断"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "W5-1",
+      "W5-2",
+      "W5-3",
+      "W5-4"
+    ]
+  }
+}

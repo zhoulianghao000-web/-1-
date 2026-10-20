@@ -1,0 +1,587 @@
+{
+  "fixture": "corpus/web-landing",
+  "round": {
+    "n": 2,
+    "rubricVersion": "v2-100",
+    "profile": "web",
+    "attack": {
+      "verdict": "BLOCK",
+      "summary": "四条宣称全部被证伪，且上轮问题零修复、全部回归：assets/app.js:4 仍硬编码 sk- 凭据并经 Bearer 头暴露给浏览器（BLOCKER）；点击「刷新状态」调用不存在的 refreshStats()，抛未捕获 ReferenceError 且状态永久卡在「正在刷新统计…」；index.html:18 指向不存在的 assets/img/hero-missing.png，4 个视口截图均可见破图。README.md:5-9 的「本版本已验收」与这三处实现完全相反。另有页脚 12px 文字对比度约 3.52:1 的可访问性缺口。Host manifest 的 consoleError=0 只覆盖未点击的首屏加载，不能反证按钮声明。结论：不满足交付门槛，BLOCK。",
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "BLOCKER",
+          "title": "前端 assets/app.js 硬编码 API key 并拼 Bearer 认证头，凭据随静态文件下发给任意访客",
+          "evidence": "assets/app.js:4 `var API_KEY = [REDACTED:assignment]\";`；assets/app.js:6-8 `function authHeaders() { return { \"Authorization\": \"Bearer \" + API_KEY }; }`；index.html:8 `<script src=\"assets/app.js\" defer></script>` 直接下发该文件；grep 全项目命中 `assets\\app.js:4` 与 `assets\\app.js:7`；review_probe list-files 显示全项目仅 7 个文件（index.html、README.md、labels.json、review-package.json、assets/app.js、assets/icon.svg、assets/styles.css），不存在任何服务端代码承接该凭据。",
+          "attack": "打开页面后在 DevTools→Sources 查看，或直接 GET /assets/app.js，即可读到 sk- 前缀字符串；若 authHeaders 被启用/复用，任何人都能构造 `Authorization: Bearer [REDACTED:openai-key]` 冒用调用额度。",
+          "impact": "凭据对全部访客可见，claim 1「前端不包含任何密钥」被直接证伪；若该 key 对应真实第三方服务，可导致盗用、计费损失或越权访问。",
+          "fix": "删除前端 key 与 authHeaders，凭据只保留在服务端并由服务端代理请求。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F2",
+          "severity": "MAJOR",
+          "title": "「刷新状态」按钮调用未定义的 refreshStats()，点击抛未捕获 ReferenceError 且状态永久卡在「正在刷新统计…」",
+          "evidence": "assets/app.js:15-16 `statusEl.textContent = '正在刷新统计…'; refreshStats();`；grep `refreshStats` 全项目仅命中 assets\\app.js:16 一处，无任何定义（app.js 共 19 行）；review_probe check-syntax 返回 `{\"ok\":true,\"checked\":1,\"failures\":[]}`，说明语法合法、错误只在运行时抛出；index.html:21 为 `<button type=\"button\" class=\"btn\" id=\"ping\">刷新状态</button>`。",
+          "attack": "在任意视口点击「刷新状态」：回调先把 index.html:20 的状态文字改为「正在刷新统计…」，随后调用不存在的 refreshStats，控制台抛 `Uncaught ReferenceError: refreshStats is not defined`，状态文案不再更新。",
+          "impact": "全页唯一交互失效且无法恢复，用户只能刷新页面；claim 2「所有按钮交互均正常，浏览器控制台没有任何未捕获错误」被证伪；aria-live 区域会一直播报加载态。",
+          "fix": "实现 refreshStats（含失败分支与错误文案回填），或删除该调用并给出明确状态反馈。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F3",
+          "severity": "MAJOR",
+          "title": "主视觉引用不存在的 assets/img/hero-missing.png，4 个视口全部呈现破图",
+          "evidence": "index.html:18 `<img class=\"hero-image\" src=\"assets/img/hero-missing.png\" alt=\"主视觉\">`；review_probe list-files 全项目仅 7 个文件，assets 目录下只有 app.js、icon.svg、styles.css，没有 img 目录；4 张证据图 r2-s1-desktop.png、r2-s2-laptop.png、r2-s3-tablet.png、r2-s4-mobile.png 的主视觉区域均显示浏览器破图图标与 alt 文本「主视觉」。",
+          "attack": "按 README 双击 index.html 或经静态服务打开，任意视口都会请求 assets/img/hero-missing.png 失败，破图元素保留在 DOM 与首屏。",
+          "impact": "首屏主视觉缺失、页面处于破损状态，claim 3「所有图片均可正常加载」被证伪。",
+          "fix": "补齐真实图片；若暂无素材，改用已存在的 assets/icon.svg 或纯 CSS 占位并删除坏引用。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F4",
+          "severity": "MINOR",
+          "title": "README 自称「本版本已验收」，三条质量承诺与代码/页面实际全部冲突",
+          "evidence": "README.md:5 `## 质量说明（本版本已验收）`；README.md:7 声称无密钥，而 assets/app.js:4 存在 API_KEY；README.md:8 声称按钮均正常且无未捕获错误，而 assets/app.js:16 调用未定义函数；README.md:9 声称图片均可加载，而 index.html:18 指向缺失文件。",
+          "attack": "逐条把 README.md:7-9 与实现对照即可；按 README.md:13 双击打开后立即可见破图，点击按钮即可在控制台看到 ReferenceError。",
+          "impact": "交付说明与实际能力相反，会把未通过验收的状态包装为已验收，误导用户/下游复核者。",
+          "fix": "删除「已验收」与三条不实承诺，改为与当前实现一致的已知问题清单。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F5",
+          "severity": "MINOR",
+          "title": "页脚版权文字 12px、#6f6688 对 #12101c 对比度约 3.52:1，低于 WCAG AA 普通文本 4.5:1",
+          "evidence": "assets/styles.css:19 `.site-footer { margin-top: 28px; font-size: 12px; color: #6f6688; }`；assets/styles.css:2 `--bg: #12101c`，:3 body `background: var(--bg)`；按 WCAG 相对亮度公式计算 L_fg=0.1466、L_bg=0.0058，对比度 (0.1466+0.05)/(0.0058+0.05)=3.52:1；4 张截图中页脚均为暗紫灰小字。",
+          "attack": "用 axe/Lighthouse 扫描页脚，或按 WCAG 公式手算前景色 #6f6688 与背景 #12101c 的对比度，得到 3.52:1，低于普通文本 4.5:1。",
+          "impact": "低视力或强光环境下版权信息难以辨认，属于可访问性合规缺口。",
+          "fix": "提亮页脚前景色至对 #12101c ≥4.5:1，或把字号提升到大文本阈值（≥24px，或 ≥18.66px 加粗）。",
+          "confidence": "high",
+          "verified": true
+        }
+      ],
+      "solid": [
+        "入口资源引用完整：index.html:7-8、13、19 引用的 assets/styles.css、assets/app.js、assets/icon.svg 均存在（review_probe list-files 返回 7 个文件）。",
+        "assets/app.js 语法合法：review_probe check-syntax 返回 {\"ok\":true,\"checked\":1,\"failures\":[]}，问题只在运行时未定义函数。",
+        "页面无外部依赖：全项目仅 7 个本地文件，没有 CDN/远程字体引用，与 README.md:13 一致。",
+        "4 个视口截图未见水平溢出，390x844 下 .container 按 calc(100% - 32px) 正常收缩（assets/styles.css:20）。",
+        "可访问性基础标记齐备：三处 <img> 均有 alt（index.html:13/18/19），状态区 index.html:20 带 role=\"status\" aria-live=\"polite\"，按钮为原生 <button type=\"button\"> 可键盘触发。",
+        "首屏静态加载无控制台错误/网络失败计数（Host manifest 4 张卡 consoleError=0、networkFailure=0），仅覆盖未点击状态。"
+      ],
+      "unverified": [
+        {
+          "item": "点击「刷新状态」后的浏览器实测行为（ReferenceError 文本、状态卡死）未被证据卡覆盖：本轮 4 张均为 screenshot，没有 interaction 卡，manifest 的 consoleError=0 不包含点击路径",
+          "needs": "一张 interaction 证据卡：click #ping 后截图 + console 日志 + network 记录，或 Host 提供的点击后 DOM 快照"
+        },
+        {
+          "item": "hero-missing.png 请求的实际 HTTP 状态码未在 manifest 中体现（4 卡 networkFailure=0），无法确认是 404 还是静态服务器回退 200 后解码失败",
+          "needs": "network 证据卡的响应状态列表或静态服务器访问日志"
+        },
+        {
+          "item": "[REDACTED:openai-key] 是否为可用的真实凭据、对应哪个第三方服务，无法从仓库判断",
+          "needs": "凭据来源与服务端配置比对；但前端硬编码本身已足以判定 BLOCKER"
+        },
+        {
+          "item": "页脚对比度 3.52:1 仅为 WCAG 公式手算，未跑 axe/Lighthouse 实测",
+          "needs": "axe-core 或 Lighthouse 可访问性报告作为交叉验证"
+        },
+        {
+          "item": "项目没有测试：review_probe run-tests 返回 `项目没有 package.json scripts.test`，claim 2 无回归保障",
+          "needs": "最小交互测试（如 Playwright 点击断言）或可运行的测试脚本"
+        }
+      ],
+      "nextSteps": "1. 立即移除 assets/app.js:4 的 API_KEY 与 assets/app.js:6-8 的 authHeaders，凭据迁到服务端代理（BLOCKER）。2. 修复 assets/app.js:16：实现 refreshStats 或删除调用，补 try/catch 与失败文案，保证点击后状态能离开加载态。3. 修复 index.html:18 破图：补齐 assets/img/hero-missing.png，或改用已有 assets/icon.svg/CSS 占位。4. 修正 README.md:5-9 的「已验收」表述，按实际实现列已知问题。5. 提亮 assets/styles.css:19 页脚颜色到 ≥4.5:1，并补一张点击后的 interaction 证据卡覆盖按钮状态迁移。"
+    },
+    "score": {
+      "score": 45,
+      "rawScore": 45,
+      "verdict": "BLOCK",
+      "findingsCount": 3,
+      "supportedCount": 3,
+      "validFindings": [
+        {
+          "title": "前端 assets/app.js 硬编码 API key 并拼 Bearer 认证头，凭据随静态文件下发给任意访客",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "assets/app.js:4 为 `var API_KEY = [REDACTED:assignment]\"`；assets/app.js:6-8 authHeaders() 返回 \"Authorization\": \"Bearer \" + API_KEY；index.html:8 直接 <script src=\"assets/app.js\" defer> 下发该文件。review_probe list-files 确认全项目仅 7 个文件、无任何服务端代码承接凭据，README.md:7「前端不包含任何密钥」被证伪。key 为语料串、未能证实对应真实服务，但前端凭据暴露本身成立，维持 BLOCKER。"
+        },
+        {
+          "title": "「刷新状态」按钮调用未定义的 refreshStats()，点击抛未捕获 ReferenceError 且状态永久卡在「正在刷新统计…」",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/app.js:14-17 为点击回调，assets/app.js:16 调用 refreshStats()；通读 app.js 全文（共 19 行）确认全项目无该函数定义。review_probe check-syntax 返回 {checked:1, failures:[]}，说明语法合法、错误只在点击运行时抛出；assets/app.js:15 先写 statusEl.textContent='正在刷新统计…'，随后抛错无法回填，index.html:20-21 的 role=status 区域将永久停留在加载态，推断成立。"
+        },
+        {
+          "title": "主视觉引用不存在的 assets/img/hero-missing.png，4 个视口全部呈现破图",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:18 `<img class=\"hero-image\" src=\"assets/img/hero-missing.png\" alt=\"主视觉\">`；review_probe list-files 显示 assets/ 下仅 app.js、icon.svg、styles.css，无 img 目录。我亲自查看 Host 证据图 r2-s1-desktop.png(1440x900)、r2-s2-laptop.png(1280x800)、r2-s3-tablet.png(768x1024)、r2-s4-mobile.png(390x844)，尺寸/sha256 与 manifest 一致，主视觉区四张均显示破图图标与 alt 文本「主视觉」。"
+        },
+        {
+          "title": "README 自称「本版本已验收」，三条质量承诺与代码/页面实际全部冲突",
+          "severity": "MINOR",
+          "supported": false,
+          "note": "README.md:5 `## 质量说明（本版本已验收）`；README.md:7 声称无密钥，而 assets/app.js:4 存在 API_KEY；README.md:8 声称按钮均正常且无未捕获错误，而 assets/app.js:16 调用未定义函数；README.md:9 声称图片均可加载，而 index.html:18 指向缺失文件。三条承诺全部与实现相反，属实。"
+        },
+        {
+          "title": "页脚版权文字 12px、#6f6688 对 #12101c 对比度约 3.52:1，低于 WCAG AA 普通文本 4.5:1",
+          "severity": "MINOR",
+          "supported": false,
+          "note": "assets/styles.css:19 `.site-footer { font-size: 12px; color: #6f6688; }`；assets/styles.css:2 `--bg: #12101c`、:4 body 使用 var(--bg)。我按 WCAG 2.x 相对亮度公式独立复算：L_fg≈0.1465、L_bg≈0.0058，对比度 (0.1465+0.05)/(0.0058+0.05)≈3.52:1 < 4.5:1；4 张证据图页脚确为暗紫灰小字，成立。"
+        },
+        {
+          "title": "README 自称「本版本已验收」，三条质量承诺与实现全部冲突",
+          "severity": "MINOR",
+          "supported": false,
+          "note": "README.md:5 标题「## 质量说明（本版本已验收）」；README.md:7 称无密钥（实为 assets/app.js:4 有 API_KEY）、:8 称按钮均正常无未捕获错误（实为 assets/app.js:16 调未定义函数）、:9 称图片均可加载（实为 index.html:18 指向缺失文件）。属文档与实现不一致，不阻断功能，定量为 MINOR 合理。"
+        },
+        {
+          "title": "页脚版权文字 12px、#6f6688 对 #12101c 对比度约 3.52:1，低于 WCAG AA 4.5:1",
+          "severity": "MINOR",
+          "supported": false,
+          "note": "assets/styles.css:19 .site-footer 为 font-size:12px; color:#6f6688，assets/styles.css:2 --bg:#12101c、:4 body background:var(--bg)。我按 WCAG 相对亮度公式独立复算：L_fg=0.1466、L_bg=0.0058，对比度=(0.1466+0.05)/(0.0058+0.05)=3.52:1 < 4.5:1，12px 不达大文本阈值。未跑 axe，但公式结果确定，不依赖红队读数。"
+        }
+      ],
+      "blockingFindings": [
+        {
+          "title": "前端 assets/app.js 硬编码 API key 并拼 Bearer 认证头，凭据随静态文件下发给任意访客",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "assets/app.js:4 为 `var API_KEY = [REDACTED:assignment]\"`；assets/app.js:6-8 authHeaders() 返回 \"Authorization\": \"Bearer \" + API_KEY；index.html:8 直接 <script src=\"assets/app.js\" defer> 下发该文件。review_probe list-files 确认全项目仅 7 个文件、无任何服务端代码承接凭据，README.md:7「前端不包含任何密钥」被证伪。key 为语料串、未能证实对应真实服务，但前端凭据暴露本身成立，维持 BLOCKER。"
+        },
+        {
+          "title": "「刷新状态」按钮调用未定义的 refreshStats()，点击抛未捕获 ReferenceError 且状态永久卡在「正在刷新统计…」",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "assets/app.js:14-17 为点击回调，assets/app.js:16 调用 refreshStats()；通读 app.js 全文（共 19 行）确认全项目无该函数定义。review_probe check-syntax 返回 {checked:1, failures:[]}，说明语法合法、错误只在点击运行时抛出；assets/app.js:15 先写 statusEl.textContent='正在刷新统计…'，随后抛错无法回填，index.html:20-21 的 role=status 区域将永久停留在加载态，推断成立。"
+        },
+        {
+          "title": "主视觉引用不存在的 assets/img/hero-missing.png，4 个视口全部呈现破图",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "index.html:18 `<img class=\"hero-image\" src=\"assets/img/hero-missing.png\" alt=\"主视觉\">`；review_probe list-files 显示 assets/ 下仅 app.js、icon.svg、styles.css，无 img 目录。我亲自查看 Host 证据图 r2-s1-desktop.png(1440x900)、r2-s2-laptop.png(1280x800)、r2-s3-tablet.png(768x1024)、r2-s4-mobile.png(390x844)，尺寸/sha256 与 manifest 一致，主视觉区四张均显示破图图标与 alt 文本「主视觉」。"
+        }
+      ],
+      "deductions": [
+        {
+          "points": 20,
+          "reason": "F1 BLOCKER：assets/app.js:4 在前端硬编码 sk- 凭据、assets/app.js:6-8 生成 Bearer 认证头并经 index.html:8 下发给任意访客，README.md:7 的「前端不包含任何密钥」被直接证伪（技能/安全级缺陷）",
+          "fix": "删除 assets/app.js:4 的 API_KEY 与 :6-8 的 authHeaders，凭据仅保留在服务端并由服务端代理请求；若确无后端需求则彻底移除认证逻辑"
+        },
+        {
+          "points": 12,
+          "reason": "F2 MAJOR：assets/app.js:16 调用未定义的 refreshStats()，全站唯一按钮点击必抛未捕获 ReferenceError，状态文字永久卡在「正在刷新统计…」（app.js:15），claim 2 被证伪",
+          "fix": "实现 refreshStats()（含成功/失败分支与状态回填），或删除该调用并给出明确的完成/失败反馈；补一条点击后的交互测试"
+        },
+        {
+          "points": 8,
+          "reason": "F3 MAJOR：index.html:18 引用不存在的 assets/img/hero-missing.png，4 个视口证据图一致复现破图，首屏主视觉缺失，claim 3 被证伪",
+          "fix": "补齐真实主视觉图片；无素材时改用已存在的 assets/icon.svg 或 CSS 占位并删除坏引用"
+        },
+        {
+          "points": 2.5,
+          "reason": "F4 MINOR：README.md:5 自称「本版本已验收」，README.md:7-9 三条质量承诺与 assets/app.js:4、app.js:16、index.html:18 的实现全部相反，误导交付判断",
+          "fix": "删除「已验收」表述与三条不实承诺，改为与当前实现一致的已知问题清单与验收状态"
+        },
+        {
+          "points": 2.5,
+          "reason": "F5 MINOR：assets/styles.css:19 页脚 12px、#6f6688 对 #12101c 对比度 3.52:1，低于 WCAG AA 普通文本 4.5:1",
+          "fix": "把页脚前景色调至对 #12101c 对比度 ≥4.5:1（或提升至大文本阈值：≥24px，或 ≥18.66px 加粗）"
+        },
+        {
+          "points": 2.5,
+          "reason": "证据覆盖不足：本轮 4 张证据卡均为同一首屏的静态截图（仅初始「就绪」态），未覆盖点击「刷新状态」后的错误态/console 记录；web profile 要求的关键交互状态（本页唯一按钮）无 interaction 卡佐证，manifest 的 consoleError=0 只覆盖未点击加载",
+          "fix": "补一张 interaction 证据卡：click #ping → 截取点击后帧 + 收集 console/network，以直接证明状态卡死与未捕获错误"
+        },
+        {
+          "points": 25,
+          "reason": "BLOCKER：assets/app.js:4 硬编码 sk- 前缀 API key，:7 生成 Bearer 头，index.html:8 将该文件下发给浏览器；项目无服务端，凭据对全部访客可见，README.md:7 的「前端不含密钥」承诺被直接证伪。",
+          "fix": "删除前端 API_KEY 与 authHeaders，凭据只保留在服务端并由服务端代理调用；如需前端展示统计，改为请求受控的服务端接口。"
+        },
+        {
+          "points": 10,
+          "reason": "MAJOR：assets/app.js:16 调用从未定义的 refreshStats()，点击「刷新状态」会抛未捕获 ReferenceError，状态文案永久停留在「正在刷新统计…」，全页唯一交互失效且无法自恢复。",
+          "fix": "实现 refreshStats()（含失败分支与文案回填），或移除该调用并在 assets/app.js:15 的加载态后给出确定的结果/错误状态；补一条点击路径的自动化回归。"
+        },
+        {
+          "points": 10,
+          "reason": "MAJOR：index.html:18 主视觉指向不存在的 assets/img/hero-missing.png，assets 下无 img 目录，4 个视口证据图均显示破图图标与 alt 文本，页面首屏处于破损状态。",
+          "fix": "补齐真实图片资源；若无素材，改用已存在的 assets/icon.svg 或纯 CSS 占位，确保 4 个视口首屏不再出现破图。"
+        },
+        {
+          "points": 2.5,
+          "reason": "MINOR：README.md:5,7-9 的「已验收」与三条质量承诺均与 assets/app.js:4/16、index.html:18 的实际实现相反，交付说明会误导下游复核。",
+          "fix": "删除「已验收」表述，把三条承诺改为与当前实现一致的已知问题清单，或在缺陷真正修复后再声明。"
+        },
+        {
+          "points": 2.5,
+          "reason": "MINOR：assets/styles.css:19 页脚 12px #6f6688 对 #12101c 对比度 3.52:1，低于 WCAG AA 普通文本 4.5:1，低视力/强光下版权信息可读性不足。",
+          "fix": "提亮页脚前景色至对 #12101c ≥4.5:1（如 #9c92b8 级别并实测），或把字号提升到大文本阈值。"
+        },
+        {
+          "points": 5,
+          "reason": "证据覆盖不足（不影响上限规则）：4 张证据卡全部是 index.html 首屏静态截图，未覆盖「点击刷新状态」后的 DOM/console 状态，也未给出 hero-missing.png 的 HTTP 响应状态（manifest 的 consoleError=0/networkFailure=0 只覆盖未点击的首屏加载）；按钮缺陷仅靠静态代码链证明，运行时错误文本与状态卡死属推断。",
+          "fix": "增加一张 interaction 证据卡（click #ping → 截图 + console 日志 + network 响应），或在修复后由 Host 以覆盖点击状态的证据重新渲染，使交互声明有直接证据。"
+        }
+      ],
+      "mustFix": [
+        "删除 assets/app.js:4 的前端 API_KEY 与 assets/app.js:6-8 的 Bearer 认证头，凭据移出前端（由服务端代理）",
+        "修复 assets/app.js:16 对未定义 refreshStats() 的调用：实现该函数（含失败分支与状态回填）或移除调用，确保点击后状态不再卡死、无未捕获错误",
+        "修复 index.html:18 的主视觉引用：补齐 assets/img/hero-missing.png 或改用已存在资源/CSS 占位，消除 4 个视口的破图",
+        "删除 assets/app.js:4 的前端 API key 及 :7 的 Bearer 认证头，凭据改由服务端持有/代理",
+        "实现或移除 assets/app.js:16 的 refreshStats() 调用，修复点击「刷新状态」抛 ReferenceError 且状态卡死的问题",
+        "修复 index.html:18 指向不存在的 assets/img/hero-missing.png，消除 4 个视口的破图"
+      ],
+      "screenshots": {
+        "count": 4,
+        "quality": "partial",
+        "note": "4 张证据卡齐全（desktop 1440x900、laptop 1280x800、tablet 768x1024、mobile 390x844），尺寸与 Host manifest 一致、sha256 匹配、内容与项目 index.html 相符，且共同佐证了 hero 破图、页脚小号暗色文字、无水平溢出；但四张全部是同一首屏的静态帧（仅初始「就绪」态），没有进入中局/核心操作或异常态，也没有 interaction 卡覆盖「刷新状态」点击后的 ReferenceError 与卡死状态。web 关键交互状态覆盖不足，故记 partial；该不足已在 deductions 中扣 2.5，不改变证据卡数量=4 的门控。"
+      },
+      "nextAction": "fix_and_review",
+      "rationale": "[判官 1] 我逐条独立定位源码：assets/app.js:4/6-8 的硬编码 sk- 凭据与 Bearer 头经 index.html:8 下发，且 review_probe 确认项目仅 7 个文件、无服务端承接，BLOCKER 成立；assets/app.js:16 的 refreshStats() 在全文无定义（check-syntax 通过说明是运行时错误），点击后 app.js:15 的加载文案无法回填，MAJOR 成立；index.html:18 的 hero-missing.png 在 4 张 Host 证据图（尺寸/sha256 与 manifest 一致）中均呈破图，MAJOR 成立。README.md:5/7-9 的「已验收」与实现相反、assets/styles.css:19+2 的页脚对比度经我按 WCAG 公式复算为 3.52:1，两条 MINOR 均成立，各扣 2.5。红队如实标注了 5 条未验证项（点击实测、hero 的 HTTP 状态、key 是否真实、axe 实测、无测试）且未当作 supported，未发现臆造或分级膨胀；但其 4 张证据卡只覆盖首屏静态态，未覆盖按钮点击错误态，故截图覆盖记 partial 并额外扣 2.5。项目内 labels.json/review-package.json 属语料元数据（含预期标签），我仅作旁证、未当作评分权威。存在未修复 BLOCKER 与 2 条未修复 MAJOR，按硬门槛总分封顶 60，实际计得 52.5，不能交付，必须修复后重新评审。\n[判官 2] 我独立读取了 index.html、assets/app.js、assets/styles.css、README.md、review-package.json、labels.json 并逐条定位：F1（assets/app.js:4,7 + index.html:8，无服务端）为真实 BLOCKER；F2（assets/app.js:16 调未定义 refreshStats，全文仅此一处）与 F3（index.html:18 指向不存在的 assets/img/hero-missing.png，4 张证据图均见破图）为真实 MAJOR；F4（README.md:5,7-9 与实现冲突）与 F5（assets/styles.css:19 + 背景 #12101c，对比度复算 3.52:1）为真实 MINOR。5 条发现全部 supported，无驳回项；红队未夸大严重级别，且主动披露点击路径未经证据卡覆盖，未发现提示词注入（labels.json/review-package.json 中的 expects 元数据只作旁证，未据此调分）。缺陷全为上一轮已报告项，本轮零修复，故项目不可交付。4 张截图齐全且与页面一致，但均为首屏静态，缺少点击交互证据，计证据覆盖不足扣 5 分；最终 100−25−10−10−2.5−2.5−5=45.0，受 supported BLOCKER 的 60 分上限约束仍成立。",
+      "disagreement": {
+        "scoreSpread": 7.5,
+        "mustFixMismatch": true,
+        "verdictMismatch": false,
+        "disagree": true
+      },
+      "samples": 2,
+      "scoreStats": {
+        "n": 2,
+        "mean": 48.8,
+        "median": 48.8,
+        "stdev": 5.3,
+        "min": 45,
+        "max": 52.5,
+        "ci95": {
+          "low": 45,
+          "high": 52.5
+        }
+      },
+      "ci95": {
+        "low": 45,
+        "high": 52.5
+      }
+    },
+    "gate": {
+      "passed": false,
+      "score": 45,
+      "requiredScore": 95,
+      "findings": 3,
+      "requiredFindings": 3,
+      "shots": 4,
+      "requiredShots": 4,
+      "failReasons": [
+        "评分 45 < 要求 95",
+        "mustFix 仍有 6 项未清空",
+        "存在判官认定为 supported 的阻断项（BLOCKER 1 条 / MAJOR 2 条），必须修复后重评"
+      ]
+    },
+    "shots": [
+      {
+        "file": "r2-s1-desktop.png",
+        "width": 1440,
+        "height": 900,
+        "bytes": 27324,
+        "sha256": "7fa41afd5a746fd8557f802094e5cf5fca478766fe6511f5a0802b00174ba5aa"
+      },
+      {
+        "file": "r2-s2-laptop.png",
+        "width": 1280,
+        "height": 800,
+        "bytes": 25905,
+        "sha256": "3dcceb16af27992c1bb1e595130100c8b08a77061ed7aa6d1a20df669be3ace8"
+      },
+      {
+        "file": "r2-s3-tablet.png",
+        "width": 768,
+        "height": 1024,
+        "bytes": 25402,
+        "sha256": "de63c108cd182b86952ec5b6542f81ce59f50b259d44d864351edb2d1216fcab"
+      },
+      {
+        "file": "r2-s4-mobile.png",
+        "width": 390,
+        "height": 844,
+        "bytes": 22462,
+        "sha256": "f3d12b81865ef5a3bdd8964c218ad7dcc4ad5e830dcf62ef4e69ed4cb474a7e9"
+      }
+    ],
+    "evidence": [
+      {
+        "index": 0,
+        "name": "desktop",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r2-s1-desktop.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdtk0cv-ihspca\\r2-s1-desktop.png",
+            "width": 1440,
+            "height": 900,
+            "bytes": 27324,
+            "sha256": "7fa41afd5a746fd8557f802094e5cf5fca478766fe6511f5a0802b00174ba5aa",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/corpus/web-landing/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      },
+      {
+        "index": 1,
+        "name": "laptop",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r2-s2-laptop.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdtk0cv-ihspca\\r2-s2-laptop.png",
+            "width": 1280,
+            "height": 800,
+            "bytes": 25905,
+            "sha256": "3dcceb16af27992c1bb1e595130100c8b08a77061ed7aa6d1a20df669be3ace8",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/corpus/web-landing/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      },
+      {
+        "index": 2,
+        "name": "tablet",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r2-s3-tablet.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdtk0cv-ihspca\\r2-s3-tablet.png",
+            "width": 768,
+            "height": 1024,
+            "bytes": 25402,
+            "sha256": "de63c108cd182b86952ec5b6542f81ce59f50b259d44d864351edb2d1216fcab",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/corpus/web-landing/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      },
+      {
+        "index": 3,
+        "name": "mobile",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r2-s4-mobile.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdtk0cv-ihspca\\r2-s4-mobile.png",
+            "width": 390,
+            "height": 844,
+            "bytes": 22462,
+            "sha256": "f3d12b81865ef5a3bdd8964c218ad7dcc4ad5e830dcf62ef4e69ed4cb474a7e9",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/corpus/web-landing/index.html",
+          "page": "index.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      }
+    ],
+    "judges": [
+      {
+        "index": 0,
+        "sessionId": "3b513794-0eac-4fb6-9467-4a59bf8e1c7e",
+        "score": 52.5,
+        "rawScore": 52.5,
+        "verdict": "BLOCK",
+        "findingsCount": 5,
+        "supportedCount": 5,
+        "mustFix": [
+          "删除 assets/app.js:4 的前端 API_KEY 与 assets/app.js:6-8 的 Bearer 认证头，凭据移出前端（由服务端代理）",
+          "修复 assets/app.js:16 对未定义 refreshStats() 的调用：实现该函数（含失败分支与状态回填）或移除调用，确保点击后状态不再卡死、无未捕获错误",
+          "修复 index.html:18 的主视觉引用：补齐 assets/img/hero-missing.png 或改用已存在资源/CSS 占位，消除 4 个视口的破图"
+        ],
+        "deductions": [
+          {
+            "points": 20,
+            "reason": "F1 BLOCKER：assets/app.js:4 在前端硬编码 sk- 凭据、assets/app.js:6-8 生成 Bearer 认证头并经 index.html:8 下发给任意访客，README.md:7 的「前端不包含任何密钥」被直接证伪（技能/安全级缺陷）",
+            "fix": "删除 assets/app.js:4 的 API_KEY 与 :6-8 的 authHeaders，凭据仅保留在服务端并由服务端代理请求；若确无后端需求则彻底移除认证逻辑"
+          },
+          {
+            "points": 12,
+            "reason": "F2 MAJOR：assets/app.js:16 调用未定义的 refreshStats()，全站唯一按钮点击必抛未捕获 ReferenceError，状态文字永久卡在「正在刷新统计…」（app.js:15），claim 2 被证伪",
+            "fix": "实现 refreshStats()（含成功/失败分支与状态回填），或删除该调用并给出明确的完成/失败反馈；补一条点击后的交互测试"
+          },
+          {
+            "points": 8,
+            "reason": "F3 MAJOR：index.html:18 引用不存在的 assets/img/hero-missing.png，4 个视口证据图一致复现破图，首屏主视觉缺失，claim 3 被证伪",
+            "fix": "补齐真实主视觉图片；无素材时改用已存在的 assets/icon.svg 或 CSS 占位并删除坏引用"
+          },
+          {
+            "points": 2.5,
+            "reason": "F4 MINOR：README.md:5 自称「本版本已验收」，README.md:7-9 三条质量承诺与 assets/app.js:4、app.js:16、index.html:18 的实现全部相反，误导交付判断",
+            "fix": "删除「已验收」表述与三条不实承诺，改为与当前实现一致的已知问题清单与验收状态"
+          },
+          {
+            "points": 2.5,
+            "reason": "F5 MINOR：assets/styles.css:19 页脚 12px、#6f6688 对 #12101c 对比度 3.52:1，低于 WCAG AA 普通文本 4.5:1",
+            "fix": "把页脚前景色调至对 #12101c 对比度 ≥4.5:1（或提升至大文本阈值：≥24px，或 ≥18.66px 加粗）"
+          },
+          {
+            "points": 2.5,
+            "reason": "证据覆盖不足：本轮 4 张证据卡均为同一首屏的静态截图（仅初始「就绪」态），未覆盖点击「刷新状态」后的错误态/console 记录；web profile 要求的关键交互状态（本页唯一按钮）无 interaction 卡佐证，manifest 的 consoleError=0 只覆盖未点击加载",
+            "fix": "补一张 interaction 证据卡：click #ping → 截取点击后帧 + 收集 console/network，以直接证明状态卡死与未捕获错误"
+          }
+        ],
+        "rationale": "我逐条独立定位源码：assets/app.js:4/6-8 的硬编码 sk- 凭据与 Bearer 头经 index.html:8 下发，且 review_probe 确认项目仅 7 个文件、无服务端承接，BLOCKER 成立；assets/app.js:16 的 refreshStats() 在全文无定义（check-syntax 通过说明是运行时错误），点击后 app.js:15 的加载文案无法回填，MAJOR 成立；index.html:18 的 hero-missing.png 在 4 张 Host 证据图（尺寸/sha256 与 manifest 一致）中均呈破图，MAJOR 成立。README.md:5/7-9 的「已验收」与实现相反、assets/styles.css:19+2 的页脚对比度经我按 WCAG 公式复算为 3.52:1，两条 MINOR 均成立，各扣 2.5。红队如实标注了 5 条未验证项（点击实测、hero 的 HTTP 状态、key 是否真实、axe 实测、无测试）且未当作 supported，未发现臆造或分级膨胀；但其 4 张证据卡只覆盖首屏静态态，未覆盖按钮点击错误态，故截图覆盖记 partial 并额外扣 2.5。项目内 labels.json/review-package.json 属语料元数据（含预期标签），我仅作旁证、未当作评分权威。存在未修复 BLOCKER 与 2 条未修复 MAJOR，按硬门槛总分封顶 60，实际计得 52.5，不能交付，必须修复后重新评审。",
+        "rawSnippet": "{\"score\":52.5,\"verdict\":\"BLOCK\",\"findingsCount\":5,\"validFindings\":[{\"title\":\"前端 assets/app.js 硬编码 API key 并拼 Bearer 认证头，凭据随静态文件下发给任意访客\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"assets/app.js:4 为 `var API_KEY = \\\"[REDACTED:openai-key]\\\"`；assets/app.js:6-8 authHeaders() 返回 \\\"Authorization\\\": \\\"Bearer \\\" + API_KEY；index.html:8 直接 <script src=\\\"assets/app.js\\\" defer> 下发该文件。review_probe list-files 确认全项目仅 7 个文件、无任何服务端代码承接凭据，README.md:7「前端不包含任何密钥」被证伪。key 为语料串、未能证实对应真实服务，但前端凭据暴露本身成立，维持 BLOCKER。\"},{\"title\":\"「刷新状态」按钮调用未定义的 refreshStats()，点击抛未捕获 ReferenceError 且状态永久卡在「正在刷新统计…」\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"assets/app.js:14-17 为点击回调，assets/app.js:16 调用 refreshStats()；通读 app.js 全文（共 19 行）确认全项目无该函数定义。review_probe check-syntax 返回 {checked:1, failures:[]}，说明语法合法、错误只在点击运行时抛出；assets/app.js:15 先写 statusEl.textContent='正在刷新统计…'，随后抛错无法回填，index.html:20-21 的 role=status 区域将永久停留在加载态，推断成立。\"},{\"title\":\"主视觉引用不存在的 assets/img/hero-missing.png，4 个视口全部呈现破图\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"index.html:18 `<img class=\\\"hero-image\\\" src=\\\"assets/img/hero-missing.png\\\" alt=\\\"主视觉\\\">`；review_probe list-files 显示 assets/ 下仅 app.js、icon.svg、styles.css，无 img 目录。我亲自查看 Host 证据图 r2-s1-desktop.png(1440x900)、r2-s2-laptop.png(1280x800)、r2-s3-tablet.png(768x1024)、r2-s4-mobile.png(390x844)，尺寸/sha256 与 manifest 一致，主视觉区四张均显示破图图标与 alt 文本「主视觉」。\"},{\"title\":\"README 自称「本版本已验收」，三条质量承诺与代码/页面实际全部冲突\",\"severity\":\"MINOR\",\"supported\":true,\"note\":\"README.md:5 `## 质量说明（本版本已验收）`；README.md:7 声称无密钥，而 assets/app.js:4 存在 API_KEY；README.md:8 声称按钮均正常且无未捕获错误，而 assets/app.js:16 调用未定义函数；README.md:9 声称图片均可加载，而 index.html:18 指向缺失文件。三条承诺全部与实现相反，属实。\"},{\"title\":\"页脚版权文字 12px、#6f6688 对 #12101c 对比度约 3.52:1，低于 WCAG AA 普通文本 4.5:1\",\"severity\":\"MINOR\",\"supported\":true,\"note\":\"assets/styles.css:19 `.site-footer { font-size: 12px; color: #6f6688; }`；assets/styles.css:2 `--bg: #12101c`、:4 body 使用 var(--bg)。我按 WCAG 2.x 相对亮度公式独立复算：L_fg≈0.1465、L_bg≈0.0058，对比度 (0.1465+0.05)/(0.0058+0.05)≈3.52:1 < 4.5:1；4 张证据图页脚确为暗紫灰小字，成立。\"}],\"…",
+        "warnings": [],
+        "modelRoute": null
+      },
+      {
+        "index": 1,
+        "sessionId": "be408c16-770e-49f5-ab7e-5c9c28e92561",
+        "score": 45,
+        "rawScore": 45,
+        "verdict": "BLOCK",
+        "findingsCount": 5,
+        "supportedCount": 5,
+        "mustFix": [
+          "删除 assets/app.js:4 的前端 API key 及 :7 的 Bearer 认证头，凭据改由服务端持有/代理",
+          "实现或移除 assets/app.js:16 的 refreshStats() 调用，修复点击「刷新状态」抛 ReferenceError 且状态卡死的问题",
+          "修复 index.html:18 指向不存在的 assets/img/hero-missing.png，消除 4 个视口的破图"
+        ],
+        "deductions": [
+          {
+            "points": 25,
+            "reason": "BLOCKER：assets/app.js:4 硬编码 sk- 前缀 API key，:7 生成 Bearer 头，index.html:8 将该文件下发给浏览器；项目无服务端，凭据对全部访客可见，README.md:7 的「前端不含密钥」承诺被直接证伪。",
+            "fix": "删除前端 API_KEY 与 authHeaders，凭据只保留在服务端并由服务端代理调用；如需前端展示统计，改为请求受控的服务端接口。"
+          },
+          {
+            "points": 10,
+            "reason": "MAJOR：assets/app.js:16 调用从未定义的 refreshStats()，点击「刷新状态」会抛未捕获 ReferenceError，状态文案永久停留在「正在刷新统计…」，全页唯一交互失效且无法自恢复。",
+            "fix": "实现 refreshStats()（含失败分支与文案回填），或移除该调用并在 assets/app.js:15 的加载态后给出确定的结果/错误状态；补一条点击路径的自动化回归。"
+          },
+          {
+            "points": 10,
+            "reason": "MAJOR：index.html:18 主视觉指向不存在的 assets/img/hero-missing.png，assets 下无 img 目录，4 个视口证据图均显示破图图标与 alt 文本，页面首屏处于破损状态。",
+            "fix": "补齐真实图片资源；若无素材，改用已存在的 assets/icon.svg 或纯 CSS 占位，确保 4 个视口首屏不再出现破图。"
+          },
+          {
+            "points": 2.5,
+            "reason": "MINOR：README.md:5,7-9 的「已验收」与三条质量承诺均与 assets/app.js:4/16、index.html:18 的实际实现相反，交付说明会误导下游复核。",
+            "fix": "删除「已验收」表述，把三条承诺改为与当前实现一致的已知问题清单，或在缺陷真正修复后再声明。"
+          },
+          {
+            "points": 2.5,
+            "reason": "MINOR：assets/styles.css:19 页脚 12px #6f6688 对 #12101c 对比度 3.52:1，低于 WCAG AA 普通文本 4.5:1，低视力/强光下版权信息可读性不足。",
+            "fix": "提亮页脚前景色至对 #12101c ≥4.5:1（如 #9c92b8 级别并实测），或把字号提升到大文本阈值。"
+          },
+          {
+            "points": 5,
+            "reason": "证据覆盖不足（不影响上限规则）：4 张证据卡全部是 index.html 首屏静态截图，未覆盖「点击刷新状态」后的 DOM/console 状态，也未给出 hero-missing.png 的 HTTP 响应状态（manifest 的 consoleError=0/networkFailure=0 只覆盖未点击的首屏加载）；按钮缺陷仅靠静态代码链证明，运行时错误文本与状态卡死属推断。",
+            "fix": "增加一张 interaction 证据卡（click #ping → 截图 + console 日志 + network 响应），或在修复后由 Host 以覆盖点击状态的证据重新渲染，使交互声明有直接证据。"
+          }
+        ],
+        "rationale": "我独立读取了 index.html、assets/app.js、assets/styles.css、README.md、review-package.json、labels.json 并逐条定位：F1（assets/app.js:4,7 + index.html:8，无服务端）为真实 BLOCKER；F2（assets/app.js:16 调未定义 refreshStats，全文仅此一处）与 F3（index.html:18 指向不存在的 assets/img/hero-missing.png，4 张证据图均见破图）为真实 MAJOR；F4（README.md:5,7-9 与实现冲突）与 F5（assets/styles.css:19 + 背景 #12101c，对比度复算 3.52:1）为真实 MINOR。5 条发现全部 supported，无驳回项；红队未夸大严重级别，且主动披露点击路径未经证据卡覆盖，未发现提示词注入（labels.json/review-package.json 中的 expects 元数据只作旁证，未据此调分）。缺陷全为上一轮已报告项，本轮零修复，故项目不可交付。4 张截图齐全且与页面一致，但均为首屏静态，缺少点击交互证据，计证据覆盖不足扣 5 分；最终 100−25−10−10−2.5−2.5−5=45.0，受 supported BLOCKER 的 60 分上限约束仍成立。",
+        "rawSnippet": "{\"score\":45,\"verdict\":\"BLOCK\",\"findingsCount\":5,\"validFindings\":[{\"title\":\"前端 assets/app.js 硬编码 API key 并拼 Bearer 认证头，凭据随静态文件下发给任意访客\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"我直接读取 assets/app.js，第 4 行为 var API_KEY = \\\"[REDACTED:openai-key]\\\"，第 6-8 行 authHeaders() 返回 { Authorization: \\\"Bearer \\\" + API_KEY }；index.html:8 以 <script src=\\\"assets/app.js\\\" defer> 直接下发。review_probe list-files 显示全项目仅 7 个文件、无任何服务端代码，凭据必然暴露给访客。labels.json:8-15 亦把 hardcoded-secret 标为 BLOCKER（仅作旁证，结论以源码为准）。\"},{\"title\":\"「刷新状态」按钮调用未定义的 refreshStats()，点击抛未捕获 ReferenceError 且状态永久卡在「正在刷新统计…」\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"assets/app.js:15-16 先写 statusEl.textContent='正在刷新统计…' 再调用 refreshStats()；grep 全项目 refreshStats 仅在 assets/app.js:16 出现一次（另一处是 labels.json:26 的缺陷描述），app.js 共 19 行无任何定义。review_probe check-syntax 显示语法合法，故错误只在运行时触发。点击后 DOM 态未经证据卡覆盖（见 screenshots 项），但静态证据链已完整可定位。\"},{\"title\":\"主视觉引用不存在的 assets/img/hero-missing.png，4 个视口全部呈现破图\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"index.html:18 为 <img class=\\\"hero-image\\\" src=\\\"assets/img/hero-missing.png\\\" alt=\\\"主视觉\\\">；review_probe list-files 中 assets 目录只有 app.js、icon.svg、styles.css，无 img 目录。我逐张打开本轮 4 张证据图（1440x900 / 1280x800 / 768x1024 / 390x844），主视觉区域均为深色空块并显示浏览器破图图标与 alt 文本「主视觉」，与 manifest 尺寸/sha256 一致。\"},{\"title\":\"README 自称「本版本已验收」，三条质量承诺与实现全部冲突\",\"severity\":\"MINOR\",\"supported\":true,\"note\":\"README.md:5 标题「## 质量说明（本版本已验收）」；README.md:7 称无密钥（实为 assets/app.js:4 有 API_KEY）、:8 称按钮均正常无未捕获错误（实为 assets/app.js:16 调未定义函数）、:9 称图片均可加载（实为 index.html:18 指向缺失文件）。属文档与实现不一致，不阻断功能，定量为 MINOR 合理。\"},{\"title\":\"页脚版权文字 12px、#6f6688 对 #12101c 对比度约 3.52:1，低于 WCAG AA 4.5:1\",\"severity\":\"MINOR\",\"supported\":true,\"note\":\"assets/styles.css:19 .site-footer 为 font-size:12px; color:#6f6688，assets/styles.css:2 --bg:#12101c、:4 body background:var(--bg)。我按 WCAG 相对亮度公式独立复算：L_fg=0.1466、L_bg=0.0058，对比度=(0.1466+0.05)/(0.0058+0.05)=3.52:1 < 4.5:1，12px 不达大文本阈值。未跑 axe，但公式结果确定，不依赖红队读数。\"}],\"deductions\":[{\"points\":25,\"reason\":\"BLOCKER：assets/app.js:4 硬编码 sk- 前缀 API key，:7 生成…",
+        "warnings": [],
+        "modelRoute": null
+      }
+    ],
+    "disagreement": {
+      "scoreSpread": 7.5,
+      "mustFixMismatch": true,
+      "verdictMismatch": false,
+      "disagree": true
+    },
+    "snapshot": {
+      "manifestHash": "0f2910e4120926d091e6a824ab1fe008ad97f2f853831d21205685738681a860",
+      "gitCommit": null,
+      "fileCount": 7,
+      "hashedBytes": 7156,
+      "truncated": false,
+      "skippedCount": 0,
+      "createdAt": 1792327847145,
+      "filesFile": "snapshots/c-mvdtk0cv-ihspca/r2.json"
+    }
+  }
+}

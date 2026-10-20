@@ -1,0 +1,70 @@
+{
+  "fixture": "known-bugs-web",
+  "description": "校准集 v0：5 个已知缺陷，供 runner.mjs 计算 recall / precision。",
+  "labels": [
+    {
+      "id": "K1",
+      "category": "dead-link",
+      "severity": "MAJOR",
+      "path": "index.html",
+      "line": 21,
+      "lines": [
+        21
+      ],
+      "summary": "「查看定价」链接指向不存在的 pricing.html（死链）"
+    },
+    {
+      "id": "K2",
+      "category": "broken-image",
+      "severity": "MAJOR",
+      "path": "index.html",
+      "line": 12,
+      "lines": [
+        12
+      ],
+      "summary": "主视觉图片 assets/hero.png 不存在（坏图）"
+    },
+    {
+      "id": "K3",
+      "category": "hardcoded-secret",
+      "severity": "BLOCKER",
+      "path": "app.js",
+      "line": 2,
+      "lines": [
+        2
+      ],
+      "summary": "前端源码硬编码 API key（占位符）"
+    },
+    {
+      "id": "K4",
+      "category": "mobile-overflow",
+      "severity": "MINOR",
+      "path": "styles.css",
+      "line": 8,
+      "lines": [
+        7,
+        8,
+        9,
+        10
+      ],
+      "summary": ".container 固定 width:980px，390px 移动端视口横向溢出"
+    },
+    {
+      "id": "K5",
+      "category": "form-nan",
+      "severity": "MAJOR",
+      "path": "app.js",
+      "line": 14,
+      "lines": [
+        14,
+        15
+      ],
+      "summary": "空输入时 parseInt('') 得到 NaN，并把 NaN 写入结果"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "maximumFalsePositiveRate": 0.15
+  }
+}

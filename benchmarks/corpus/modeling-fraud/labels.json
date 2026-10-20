@@ -1,0 +1,60 @@
+{
+  "fixture": "modeling-fraud",
+  "description": "v2.0 校准语料 modeling-fraud：4 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "MO2-1",
+      "category": "metric-mismatch",
+      "severity": "MAJOR",
+      "path": "paper.md",
+      "line": 14,
+      "lines": [
+        14
+      ],
+      "description": "论文宣称测试集 accuracy 0.95 / F1 0.95，但 metrics.json 实测 accuracy 0.85 / F1 0.835（差约 10 个百分点）"
+    },
+    {
+      "id": "MO2-2",
+      "category": "figure-inconsistency",
+      "severity": "MAJOR",
+      "path": "report.html",
+      "line": 18,
+      "lines": [
+        18
+      ],
+      "description": "report.html 的 accuracy 表格展示 0.95，而 metrics.json 实测 0.85；图表也按 0.95 绘制，表格/图表/指标三者不一致"
+    },
+    {
+      "id": "MO2-3",
+      "category": "non-reproducible",
+      "severity": "MAJOR",
+      "path": "model.py",
+      "line": 32,
+      "lines": [
+        32
+      ],
+      "description": "model.py 使用 random.shuffle(rows) 且没有 random.seed()：每次运行的 train/test 划分都不同，实验不可复现（指标也被硬编码，无法复核）"
+    },
+    {
+      "id": "MO2-4",
+      "category": "p-hacking",
+      "severity": "MAJOR",
+      "path": "paper.md",
+      "line": 15,
+      "lines": [
+        15
+      ],
+      "description": "论文称在 42 组超参数中搜索并只报告最优结果，未报告搜索预算、全部结果或方差，存在 p-hacking 风险"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "MO2-1",
+      "MO2-2",
+      "MO2-3",
+      "MO2-4"
+    ]
+  }
+}

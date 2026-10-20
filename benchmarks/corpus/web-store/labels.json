@@ -1,0 +1,60 @@
+{
+  "fixture": "web-store",
+  "description": "v2.0 校准语料 web-store：4 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "W7-1",
+      "category": "form-no-action",
+      "severity": "MINOR",
+      "path": "index.html",
+      "line": 21,
+      "lines": [
+        21
+      ],
+      "description": "订阅表单既没有 action，也没有提交处理，提交后页面回到同页并丢失输入"
+    },
+    {
+      "id": "W7-2",
+      "category": "missing-alt",
+      "severity": "MINOR",
+      "path": "index.html",
+      "line": 18,
+      "lines": [
+        18
+      ],
+      "description": "相册图片没有 alt 属性，读屏软件无法描述图片内容"
+    },
+    {
+      "id": "W7-3",
+      "category": "undefined-function",
+      "severity": "MAJOR",
+      "path": "assets/app.js",
+      "line": 10,
+      "lines": [
+        10
+      ],
+      "description": "按钮点击处理调用未定义的 refreshStats()，点击后抛 ReferenceError，状态更新中断"
+    },
+    {
+      "id": "W7-4",
+      "category": "mobile-overflow",
+      "severity": "MINOR",
+      "path": "assets/styles.css",
+      "line": 23,
+      "lines": [
+        23
+      ],
+      "description": ".panel 固定 width:980px，390px 移动端页面出现横向溢出"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "W7-1",
+      "W7-2",
+      "W7-3",
+      "W7-4"
+    ]
+  }
+}

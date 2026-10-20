@@ -1,0 +1,819 @@
+{
+  "fixture": "modeling-seeded",
+  "round": {
+    "n": 1,
+    "rubricVersion": "v2-100",
+    "profile": "modeling",
+    "attack": {
+      "verdict": "BLOCK",
+      "summary": "核心问题不是单点 bug，而是结果不可复现且方法学上同时存在两类泄漏：时间有序数据随机打乱划分（未来样本进训练），且在划分前用全量数据做特征选择/标准化。Host 两次执行声明的 `python run_experiment.py` 分别得到 accuracy=0.8300 与 0.8200，而 README/论文/图表宣称 0.95，提交的 metrics.json 又是 0.85，三者互不一致。论文的 baseline 0.87、+8.0 点和 p<0.05 在仓库中没有对应实现或检验代码，属于无来源断言。4 张证据卡已逐张核对（metrics 图、report、confusion、paper 第 1/2 页），manifest consoleError=0、networkFailure=0；问题不在渲染，而在数据与方法。report.html 同一页卡片 0.8500 与 Figure 1 硬编码 0.95 自相矛盾。因此判定 BLOCK，必须修泄漏、可复现性和指标/图表一致性后再交付。",
+      "findings": [
+        {
+          "id": "F1",
+          "severity": "BLOCKER",
+          "title": "特征选择与标准化在 train/test 划分前用全量数据拟合，测试集标签与分布泄漏",
+          "evidence": "model.py:155-157 依次调用 select_features(rows, FEATURE_COUNT)、fit_scaler(rows, features)、scale_rows(rows, features, stats)，到 :158 才 split_rows；select_features 在 model.py:57-60 用全量 rows 的 label 计算相关系数，fit_scaler 在 model.py:68-70 用全量 rows 计算 mean/std。",
+          "attack": "按 README 命令运行 python run_experiment.py：测试行的 label 参与第 155 行的相关性排序，测试行的特征值参与第 156 行的 mean/std；把测试集标签或分布改掉，选出的特征与标准化参数会随之变化，说明 test 信息进入了训练前处理。",
+          "impact": "测试集信息进入训练前处理，指标被系统性高估；这使 0.82-0.85 的 accuracy 不能作为 held-out 泛化证据，论文/报告的结论失去基础。",
+          "fix": "先按时间切出 train/test，只在 train 上拟合特征选择与 scaler，再 transform test。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F2",
+          "severity": "BLOCKER",
+          "title": "时间有序数据随机打乱 75/25 划分，未来样本进入训练集（时序泄漏）",
+          "evidence": "model.py:86-89 的 split_rows 用 rng.shuffle(shuffled) 后按 75% 切分，完全不使用 timestamp；README.md:31-32 与 paper.md:29-31 均承认 churn rate 随时间漂移且行按采集时间排序；paper.md:16-18 自己还写了随机划分在时间序数据上会偏乐观；data.csv 统计：row_id 1000-1199 正例 74/200=37.0%，row_id 1200-1399 正例 105/200=52.5%（grep '^1[01][0-9]{2},.*,1$' 与 '^1[23][0-9]{2},.*,1$' 分别 74/105 条）。",
+          "attack": "按当前命令运行一次即可触发：shuffle 后的 test 集包含晚于许多训练样本的日期（timestamp 未参与切分），训练集不是过去、测试集不是未来；若要量化，可在同一数据上按 timestamp 前 75%/后 25% 重跑，但 modeling-run.json 没有该命令，本轮未执行。",
+          "impact": "报告的 test accuracy 是随机内插而非未来外推；论文/README 的 0.95 及泛化结论不成立，部署到未来客户会高估效果。",
+          "fix": "按时间切分（或 rolling/out-of-time 验证），并在报告中明确评估的是时间外推而非随机 held-out。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F3",
+          "severity": "BLOCKER",
+          "title": "核心指标宣称 0.95/0.94/0.96/0.95 与 metrics.json 及重跑结果严重不符",
+          "evidence": "README.md:46-49 与 paper.md:9-11、49-52 宣称 accuracy 0.95、precision 0.94、recall 0.96、F1 0.95；metrics.json:2/18/19/9 实为 0.85/0.8511/0.8333/0.8421；Host run-metrics 执行 [\"python\",\"run_experiment.py\"]（exitCode=0）返回 accuracy=0.8300 precision=0.7547 recall=0.9091 f1=0.8247，第二次返回 accuracy=0.8200 precision=0.8537 recall=0.7447 f1=0.7955；三次结果没有一次达到 0.95。",
+          "attack": "按 README 命令重跑后读 metrics.json，或直接对比 README.md:46-49 与 metrics.json:2：accuracy 差 10 个百分点，其他指标也不同；0.95 在本仓库代码下不可复现。",
+          "impact": "论文/README 的核心结果不成立，读者与下游决策会基于错误的 0.95 性能；报告与图表整体失去可信度。",
+          "fix": "以实际重跑（固定 seed）的 metrics.json 为准重写全部指标，删除 0.95 等未复现值，并让 README/报告/论文由同一指标文件生成。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F4",
+          "severity": "MAJOR",
+          "title": "论文宣称的未正则化 baseline（accuracy 0.87、+8.0 点）在仓库中没有实现或指标来源",
+          "evidence": "paper.md:54-55 与 README.md:49 声称 baseline accuracy 0.87、提升 8.0 个 accuracy 点；对 *.py 只读检索 `bootstrap|p_value|ttest|confidence|scipy|numpy|baseline|unregular` 返回 No matches found；model.py:100-116 唯一的 train_logistic 固定使用 L2（model.py:22 L2=0.001），没有关闭正则化或训练第二个模型的入口。",
+          "attack": "要求按 README 复现 baseline：唯一命令 python run_experiment.py 只输出一个正则化模型，没有关闭 L2 或训练第二个模型的参数；因此 0.87 和 8.0 点无法由仓库任何命令生成。",
+          "impact": "正则化是否真的优于 baseline 未被验证，+8.0 点是无法追溯的断言；论文的核心对比结论不可复核。",
+          "fix": "在同一 split/同一特征上实现未正则化 baseline 并报告两模型指标，或删除该对比与 8.0 点宣称。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F5",
+          "severity": "MAJOR",
+          "title": "默认命令无随机种子，两次重跑指标不同，与 README/论文的可复现宣称矛盾",
+          "evidence": "run_experiment.py:19 的 --seed 默认 None，:22 使用无种子的 random.Random()；README.md:54-56 称 python run_experiment.py 复现 metrics.json，paper.md:64-65 称 fully deterministic；Host 两次 run-metrics 的 stdout 分别为 `accuracy=0.8300 precision=0.7547 recall=0.9091 f1=0.8247` 与 `accuracy=0.8200 precision=0.8537 recall=0.7447 f1=0.7955`（exitCode=0）；metrics.json:20 的 seed 为 null，report.html:102 写 not fixed。",
+          "attack": "连续执行两次 python run_experiment.py（Host 已执行两次）：第一次 accuracy=0.8300，第二次 accuracy=0.8200；提交的 metrics.json 0.85 也无法由该命令复现。",
+          "impact": "任何指标都无法被第三方复核，所谓 fully reproducible 不成立；审稿人无法判断 0.95/0.85/0.83 哪个是真实结果。",
+          "fix": "默认固定并记录 seed（或在 modeling-run.json 中显式传 --seed），提交由该固定命令生成的 metrics.json。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F6",
+          "severity": "MAJOR",
+          "title": "figures/metrics-chart.png 硬编码 0.95 等报告草稿数字，与同页 metrics.json 表格矛盾",
+          "evidence": "make_figures.py:19 定义 REPORTED = {accuracy: 0.95, precision: 0.94, recall: 0.96, f1: 0.95}，:221 直接把 REPORTED 传给 draw_metrics_chart，只有 :222 的 confusion 图读 metrics.json；生成的 r1-s1-metrics-chart.png 柱值为 0.95/0.94/0.96/0.95，而 report.html:50 的卡片为 0.8500、:85 嵌入该图；r1-s4-confusion.png 的 45/7/8/40 对应 (45+40)/100=0.85。",
+          "attack": "打开 report.html：顶部卡片显示 0.8500/0.8511/0.8333/0.8421，下面 Figure 1 却显示 0.95/0.94/0.96/0.95；把 metrics.json 改成任意值后重跑 make_report.py，卡片会变而 Figure 1 不会变（硬编码）。",
+          "impact": "同一页面/同一报告内数字自相矛盾，读者会误以为模型达到 0.95；图表不能由 metrics.json 重建，复核失败。",
+          "fix": "删除 REPORTED 硬编码，metrics-chart 从 metrics.json 读取同一组指标并重新生成 PNG/报告。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F7",
+          "severity": "MAJOR",
+          "title": "row_id 作为数值特征参与选择与训练，ID/顺序信息泄漏随时间漂移的标签",
+          "evidence": "model.py:17 的 FEATURE_POOL 包含 row_id，:30 把它读入，:59-62 让它参与相关性排序；metrics.json:11-14 显示最终特征为 f1,f2,f3,row_id；README.md:26 把 row_id 定义为 record identifier；data.csv 中 row_id 与 timestamp 同步递增，前 200 行正例 74/200=37.0%、后 200 行 105/200=52.5%（grep 计数）。",
+          "attack": "训练时把 row_id 当普通数值特征：模型可学到“行号越大越可能 churn”的时间趋势；当前 metrics.json 已证明 row_id 击败 f4 被选入前四，说明它携带强标签信号。",
+          "impact": "模型依赖记录顺序而非客户特征，测试指标被高估且无法推广到新数据；这是与时间漂移耦合的 ID 泄漏。",
+          "fix": "从 FEATURE_POOL 移除 row_id（及 timestamp 等 ID/时间列），只保留可解释的客户特征。",
+          "confidence": "high",
+          "verified": true
+        },
+        {
+          "id": "F8",
+          "severity": "MAJOR",
+          "title": "p < 0.05 的 paired bootstrap 显著性结论无代码、无基线预测、无置信区间",
+          "evidence": "paper.md:55-58 声称对 test 预测做 paired bootstrap 得 p < 0.05，并称不报 CI 是因为单次 split 已足够；对 *.py 检索 `bootstrap|p_value|ttest|confidence|scipy|numpy|baseline|unregular` 无命中，仓库没有 baseline 预测或任何检验实现；metrics.json:16-17 只有一次 100 行 test，Host 两次重跑 accuracy 从 0.8300 变 0.8200。",
+          "attack": "要求作者给出生成 p 值的命令：不存在；paired bootstrap 需要 baseline 与模型的逐样本预测对，仓库没有 baseline 实现；同一 test split 的两次重跑指标波动大于 0.05 所暗示的稳定性。",
+          "impact": "统计显著性结论无来源，属于编造/不可复核的定量声明；“单次 split 已足够”与样本量 100、无 CI 的事实矛盾，误导读者。",
+          "fix": "用多次固定 seed 或时间切分重复评估，报告均值/CI，并对真实 baseline 做配对检验；否则删除 p 值与显著性宣称。",
+          "confidence": "high",
+          "verified": true
+        }
+      ],
+      "solid": [
+        "入口可运行：Host run-metrics 两次均 exitCode=0（duration 363ms/383ms），run_experiment.py 能读 data.csv、训练并写出 metrics.json；项目纯标准库、无网络请求。",
+        "局部一致性：figures/confusion.png 的 45/7/8/40 与 metrics.json:4-7 完全一致（N TEST=100）；report.html:50-65 的卡片/表格也与 metrics.json 的 0.8500/0.8511/0.8333/0.8421 一致。",
+        "论文 PDF 与 paper.md 一致：pdf-text 卡第 1/2 页摘要的 0.95/0.94/0.96/0.95 与 paper.md:9-11 相同；paper.pdf 内容流第 68-71 行含 Table 1 的 0.95/0.94/0.96/0.95。",
+        "无前端密钥/外部依赖：report.html 无 JS、无 http(s) 外链；全项目 grep `api[_-]?key|secret|token|Bearer|sk-[A-Za-z0-9]|password|http(s)://` 无命中；data.csv 为合成数值数据，无 PII。",
+        "文件引用完整：README 文件表列出的 data.csv、model.py、run_experiment.py、metrics.json、make_*.py、figures/*.png、report.html、paper.pdf 均存在；report.html 的 img src 指向实际存在的 PNG。",
+        "可访问性基础：report.html 有 lang=en、h1/h2 层级、table th、img alt、viewport 与 max-width:760px 媒体查询；manifest consoleError=0、networkFailure=0。"
+      ],
+      "unverified": [
+        {
+          "item": "make_report.py / make_figures.py / make_paper_pdf.py 未由 Host 执行：modeling-run.json 只声明 [\"python\",\"run_experiment.py\"]；三个脚本的产物存在且与源码逻辑一致，但重新生成未独立验证。",
+          "needs": "在 modeling-run.json 中加入这三个命令并复跑，或由 Host 提供执行入口。"
+        },
+        {
+          "item": "固定 --seed 42 后是否逐位复现未验证：modeling-run.json 没有 --seed；默认无种子已由两次 run-metrics 证明不确定。",
+          "needs": "在 modeling-run.json 固定 --seed 42，连续两次 run-metrics 比对全部字段。"
+        },
+        {
+          "item": "PDF 第 2 页 Table 1 未被 pdf-text 卡覆盖：manifest 显示卡片只抽取第 1/2 页（2114 字符），Table 1 在页 2。",
+          "needs": "Host 渲染 paper.pdf 第 2 页作为 pdf-text 卡；本报告暂用 paper.md:49-52 与 paper.pdf 内容流核对。"
+        },
+        {
+          "item": "按 timestamp 切分的真实外推指标与泄漏高估幅度未量化：Host 只能执行 modeling-run.json 声明的命令，无法注入自定义脚本。",
+          "needs": "增加按时间切分的实验命令并复跑，比较随机划分 vs 时间切分的指标。"
+        },
+        {
+          "item": "移动端/平板响应式与键盘/屏幕阅读器可访问性未实际渲染：本轮只有 1440x1000 桌面截图，无浏览器控制。",
+          "needs": "多视口截图 + 键盘 tab 顺序与对比度检查。"
+        }
+      ],
+      "nextSteps": "1) 先修泄漏：按 timestamp 切出 train/test，所有特征选择与 scaler 只在 train 上 fit，并移除 row_id。2) 修可复现：默认固定 seed（并在 modeling-run.json 显式传 --seed），提交由该命令生成的 metrics.json；连续两次复跑一致后再更新 README/paper/report。3) 补对照与统计：实现同 split 的未正则化 baseline，报告多次重复的均值/CI 与配对检验，替换或删除 8.0 点与 p<0.05。4) 修图表：删除 make_figures.py 的 REPORTED 硬编码，让 metrics-chart 从 metrics.json 生成，并重新生成 PNG/report.html/paper.pdf。5) 增加可复核性：把 run_experiment.py + make_report.py + make_figures.py + make_paper_pdf.py 纳入 modeling-run.json/CI，并在报告中标注随机划分与时间外推的限制。"
+    },
+    "score": {
+      "score": 39,
+      "rawScore": 39,
+      "verdict": "BLOCK",
+      "findingsCount": 8,
+      "supportedCount": 8,
+      "validFindings": [
+        {
+          "title": "F1 [BLOCKER] 特征选择与标准化在 train/test 划分前用全量数据拟合，测试集标签与分布泄漏",
+          "severity": "BLOCKER",
+          "supported": false,
+          "note": "model.py:155-157 先调用 select_features(rows)/fit_scaler(rows)/scale_rows(rows)，model.py:158 才 split_rows；select_features 在 model.py:57-60 用全量 rows 的 label 计算相关性，fit_scaler 在 model.py:68-70 用全量 rows 计算 mean/std，确认测试信息进入预处理。"
+        },
+        {
+          "title": "F2 [BLOCKER] 时间有序数据随机打乱 75/25 划分，未来样本进入训练集（时序泄漏）",
+          "severity": "BLOCKER",
+          "supported": false,
+          "note": "model.py:86-89 的 split_rows 仅 rng.shuffle 后按 75% 切分，全程未使用 timestamp；README.md:31-32 与 paper.md:29-31 承认行按采集时间排序且 churn rate 随时间漂移；data.csv 实测 row_id 1000-1199 正例 74/200、1200-1399 正例 105/200。"
+        },
+        {
+          "title": "F3 [BLOCKER] 核心指标宣称 0.95/0.94/0.96/0.95 与 metrics.json 及重跑结果严重不符",
+          "severity": "BLOCKER",
+          "supported": false,
+          "note": "README.md:46-49 与 paper.md:9-11、49-52 宣称 accuracy 0.95、precision 0.94、recall 0.96、F1 0.95；metrics.json:2/9/18/19 实为 0.85/0.8421/0.8511/0.8333；Host run-metrics 两次（commands=['python','run_experiment.py']，exitCode=0）返回 accuracy=0.8200 与 0.8300，均未达 0.95。"
+        },
+        {
+          "title": "F4 [MAJOR] 论文宣称的未正则化 baseline（accuracy 0.87、+8.0 点）在仓库中没有实现或指标来源",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "paper.md:54-55 与 README.md:49 声称 baseline accuracy 0.87、提升 8.0 点；对 *.py 执行 grep 'baseline|unregular|bootstrap|p_value' 无命中；model.py:22 固定 L2=0.001，model.py:100-116 的 train_logistic 在 :115 始终施加正则，无关闭入口或第二个模型。"
+        },
+        {
+          "title": "F5 [MAJOR] 默认命令无随机种子，两次重跑指标不同，与 README/论文的可复现宣称矛盾",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "run_experiment.py:19 的 --seed 默认 None，:22 使用无种子 random.Random()；Host 两次 run-metrics 得到 accuracy=0.8200 与 0.8300（exitCode=0），metrics.json:20 的 seed=null，report.html:102 写 not fixed；README.md:54-56 与 paper.md:62-65 却称可复现/fully deterministic。"
+        },
+        {
+          "title": "F6 [MAJOR] figures/metrics-chart.png 硬编码 0.95 等报告草稿数字，与同页 metrics.json 表格矛盾",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "make_figures.py:19 定义 REPORTED={0.95,0.94,0.96,0.95}，:221 直接把 REPORTED 传给 draw_metrics_chart，:222 才读 metrics.json 画混淆矩阵；证据卡 r1-s1 的柱值为 0.95/0.94/0.96/0.95，而 report.html:50-53 卡片为 0.8500/0.8511/0.8333/0.8421；r1-s4 的 45/7/8/40 与 metrics.json:3-8 一致。"
+        },
+        {
+          "title": "F7 [MAJOR] row_id 作为数值特征参与选择与训练，ID/顺序信息泄漏随时间漂移的标签",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "model.py:17 的 FEATURE_POOL 含 row_id，:30 将其读入，:59-62 参与相关性排序；metrics.json:10-15 与 Host 输出 features 均为 f1,f2,f3,row_id；data.csv 中 row_id 与 timestamp 同步递增，前 200 行正例率 37.0%、后 200 行 52.5%。"
+        },
+        {
+          "title": "F8 [MAJOR] p < 0.05 的 paired bootstrap 显著性结论无代码、无基线预测、无置信区间",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "paper.md:55-58 宣称 paired bootstrap p<0.05 且不报 CI；对 *.py grep 'bootstrap|p_value|ttest|confidence|scipy' 无命中；metrics.json 只有单次 100 行 test（:16-17）且无 baseline 逐样本预测。注：红队『同一 split 两次重跑』措辞不准确（两次为不同随机 split），但核心结论仍成立。"
+        },
+        {
+          "title": "特征选择与标准化在 train/test 划分前用全量数据拟合，测试集标签与分布泄漏",
+          "severity": "BLOCKER",
+          "supported": false,
+          "note": "model.py:155-157 在 model.py:158 的 split_rows 之前调用 select_features(rows)（:57-60 用全量 rows 的 label 计算相关性）和 fit_scaler(rows)（:68-70 用全量 rows 计算 mean/std）；run_experiment.py:27 也把全量 rows 传入 train_and_evaluate，测试标签/分布参与训练前处理，BLOCKER 成立。"
+        },
+        {
+          "title": "时间有序数据随机打乱 75/25 划分，未来样本进入训练集（时序泄漏）",
+          "severity": "BLOCKER",
+          "supported": false,
+          "note": "model.py:84-89 的 split_rows 只做 rng.shuffle 后按 75% 切分，全程不用 timestamp；README.md:31-32 与 paper.md:29-31 承认流失率随时间漂移且按采集顺序存储，data.csv:2 起 row_id/timestamp 同步逐日递增，随机划分把未来样本放进训练集，时序泄漏成立，BLOCKER 成立。"
+        },
+        {
+          "title": "核心指标宣称 0.95/0.94/0.96/0.95 与 metrics.json 及重跑结果严重不符",
+          "severity": "BLOCKER",
+          "supported": false,
+          "note": "README.md:46-49 与 paper.md:8-11、49-52 宣称 accuracy 0.95、precision 0.94、recall 0.96、F1 0.95；metrics.json:2/18/19/9 实为 0.85/0.8511/0.8333/0.8421；Host review_probe run-metrics 两次执行 [\"python\",\"run_experiment.py\"]（exitCode=0）实测 0.8700 与 0.7900，均未达到 0.95（红队引用的 0.8300/0.8200 是同一不稳定命令的另两次结果），核心指标不可复现，BLOCKER 成立。"
+        },
+        {
+          "title": "论文宣称的未正则化 baseline（accuracy 0.87、+8.0 点）在仓库中没有实现或指标来源",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "paper.md:54-55 与 README.md:49 宣称未正则化 baseline accuracy 0.87、提升 8.0 点；对 *.py 检索 bootstrap|baseline|unregular|ttest|confidence 等无命中，model.py:100-116 的 train_logistic 始终使用 L2（model.py:22 L2=0.001），没有关闭正则化或训练第二个模型的入口，0.87 与 +8.0 点无实现/指标来源，MAJOR 成立。"
+        },
+        {
+          "title": "默认命令无随机种子，两次重跑指标不同，与 README/论文的可复现宣称矛盾",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "run_experiment.py:19 的 --seed 默认 None，:22 使用无种子 random.Random()；Host run-metrics 两次同一命令 exitCode=0 分别得到 accuracy=0.8700 与 0.7900，metrics.json:20 seed=null、report.html:102 写 not fixed，README.md:55-56 与 paper.md:64-65 的确定性/可复现宣称不成立，MAJOR 成立。"
+        },
+        {
+          "title": "figures/metrics-chart.png 硬编码 0.95 等报告草稿数字，与同页 metrics.json 表格矛盾",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "make_figures.py:19 硬编码 REPORTED={accuracy:0.95, precision:0.94, recall:0.96, f1:0.95}，:221 将其传给 draw_metrics_chart 而非 metrics.json（:222 仅混淆矩阵读文件）；代表图 r1-s1-metrics-chart.png 柱值确为 0.95/0.94/0.96/0.95，而 report.html:50-53 卡片与 r1-s3-report.png 为 0.8500/0.8511/0.8333/0.8421，同页自相矛盾，MAJOR 成立。"
+        },
+        {
+          "title": "row_id 作为数值特征参与选择与训练，ID/顺序信息泄漏随时间漂移的标签",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "model.py:17 的 FEATURE_POOL 含 row_id，:30 载入、:59-60 参与相关性排序；metrics.json:11-14 的 features 为 f1,f2,f3,row_id；README.md:26 定义 row_id 为 record identifier，data.csv:2 起 row_id 与 timestamp 同步递增，README.md:31-32 又说明标签随时间漂移，行号/顺序信息泄漏成立，MAJOR 成立。"
+        },
+        {
+          "title": "p < 0.05 的 paired bootstrap 显著性结论无代码、无基线预测、无置信区间",
+          "severity": "MAJOR",
+          "supported": false,
+          "note": "paper.md:55-58 宣称 paired bootstrap 得到 p<0.05 且不报 CI；全项目 *.py 检索 bootstrap|p_value|ttest|confidence 无命中，仓库无 baseline 预测或任何检验实现，metrics.json:16-17 只有单次 100 行 test 且 seed=null，p 值与显著性结论无来源，MAJOR 成立。"
+        }
+      ],
+      "blockingFindings": [
+        {
+          "title": "F1 [BLOCKER] 特征选择与标准化在 train/test 划分前用全量数据拟合，测试集标签与分布泄漏",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "model.py:155-157 先调用 select_features(rows)/fit_scaler(rows)/scale_rows(rows)，model.py:158 才 split_rows；select_features 在 model.py:57-60 用全量 rows 的 label 计算相关性，fit_scaler 在 model.py:68-70 用全量 rows 计算 mean/std，确认测试信息进入预处理。"
+        },
+        {
+          "title": "F2 [BLOCKER] 时间有序数据随机打乱 75/25 划分，未来样本进入训练集（时序泄漏）",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "model.py:86-89 的 split_rows 仅 rng.shuffle 后按 75% 切分，全程未使用 timestamp；README.md:31-32 与 paper.md:29-31 承认行按采集时间排序且 churn rate 随时间漂移；data.csv 实测 row_id 1000-1199 正例 74/200、1200-1399 正例 105/200。"
+        },
+        {
+          "title": "F3 [BLOCKER] 核心指标宣称 0.95/0.94/0.96/0.95 与 metrics.json 及重跑结果严重不符",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "README.md:46-49 与 paper.md:9-11、49-52 宣称 accuracy 0.95、precision 0.94、recall 0.96、F1 0.95；metrics.json:2/9/18/19 实为 0.85/0.8421/0.8511/0.8333；Host run-metrics 两次（commands=['python','run_experiment.py']，exitCode=0）返回 accuracy=0.8200 与 0.8300，均未达 0.95。"
+        },
+        {
+          "title": "F4 [MAJOR] 论文宣称的未正则化 baseline（accuracy 0.87、+8.0 点）在仓库中没有实现或指标来源",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "paper.md:54-55 与 README.md:49 声称 baseline accuracy 0.87、提升 8.0 点；对 *.py 执行 grep 'baseline|unregular|bootstrap|p_value' 无命中；model.py:22 固定 L2=0.001，model.py:100-116 的 train_logistic 在 :115 始终施加正则，无关闭入口或第二个模型。"
+        },
+        {
+          "title": "F5 [MAJOR] 默认命令无随机种子，两次重跑指标不同，与 README/论文的可复现宣称矛盾",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "run_experiment.py:19 的 --seed 默认 None，:22 使用无种子 random.Random()；Host 两次 run-metrics 得到 accuracy=0.8200 与 0.8300（exitCode=0），metrics.json:20 的 seed=null，report.html:102 写 not fixed；README.md:54-56 与 paper.md:62-65 却称可复现/fully deterministic。"
+        },
+        {
+          "title": "F6 [MAJOR] figures/metrics-chart.png 硬编码 0.95 等报告草稿数字，与同页 metrics.json 表格矛盾",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "make_figures.py:19 定义 REPORTED={0.95,0.94,0.96,0.95}，:221 直接把 REPORTED 传给 draw_metrics_chart，:222 才读 metrics.json 画混淆矩阵；证据卡 r1-s1 的柱值为 0.95/0.94/0.96/0.95，而 report.html:50-53 卡片为 0.8500/0.8511/0.8333/0.8421；r1-s4 的 45/7/8/40 与 metrics.json:3-8 一致。"
+        },
+        {
+          "title": "F7 [MAJOR] row_id 作为数值特征参与选择与训练，ID/顺序信息泄漏随时间漂移的标签",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "model.py:17 的 FEATURE_POOL 含 row_id，:30 将其读入，:59-62 参与相关性排序；metrics.json:10-15 与 Host 输出 features 均为 f1,f2,f3,row_id；data.csv 中 row_id 与 timestamp 同步递增，前 200 行正例率 37.0%、后 200 行 52.5%。"
+        },
+        {
+          "title": "F8 [MAJOR] p < 0.05 的 paired bootstrap 显著性结论无代码、无基线预测、无置信区间",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "paper.md:55-58 宣称 paired bootstrap p<0.05 且不报 CI；对 *.py grep 'bootstrap|p_value|ttest|confidence|scipy' 无命中；metrics.json 只有单次 100 行 test（:16-17）且无 baseline 逐样本预测。注：红队『同一 split 两次重跑』措辞不准确（两次为不同随机 split），但核心结论仍成立。"
+        },
+        {
+          "title": "特征选择与标准化在 train/test 划分前用全量数据拟合，测试集标签与分布泄漏",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "model.py:155-157 在 model.py:158 的 split_rows 之前调用 select_features(rows)（:57-60 用全量 rows 的 label 计算相关性）和 fit_scaler(rows)（:68-70 用全量 rows 计算 mean/std）；run_experiment.py:27 也把全量 rows 传入 train_and_evaluate，测试标签/分布参与训练前处理，BLOCKER 成立。"
+        },
+        {
+          "title": "时间有序数据随机打乱 75/25 划分，未来样本进入训练集（时序泄漏）",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "model.py:84-89 的 split_rows 只做 rng.shuffle 后按 75% 切分，全程不用 timestamp；README.md:31-32 与 paper.md:29-31 承认流失率随时间漂移且按采集顺序存储，data.csv:2 起 row_id/timestamp 同步逐日递增，随机划分把未来样本放进训练集，时序泄漏成立，BLOCKER 成立。"
+        },
+        {
+          "title": "核心指标宣称 0.95/0.94/0.96/0.95 与 metrics.json 及重跑结果严重不符",
+          "severity": "BLOCKER",
+          "supported": true,
+          "note": "README.md:46-49 与 paper.md:8-11、49-52 宣称 accuracy 0.95、precision 0.94、recall 0.96、F1 0.95；metrics.json:2/18/19/9 实为 0.85/0.8511/0.8333/0.8421；Host review_probe run-metrics 两次执行 [\"python\",\"run_experiment.py\"]（exitCode=0）实测 0.8700 与 0.7900，均未达到 0.95（红队引用的 0.8300/0.8200 是同一不稳定命令的另两次结果），核心指标不可复现，BLOCKER 成立。"
+        },
+        {
+          "title": "论文宣称的未正则化 baseline（accuracy 0.87、+8.0 点）在仓库中没有实现或指标来源",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "paper.md:54-55 与 README.md:49 宣称未正则化 baseline accuracy 0.87、提升 8.0 点；对 *.py 检索 bootstrap|baseline|unregular|ttest|confidence 等无命中，model.py:100-116 的 train_logistic 始终使用 L2（model.py:22 L2=0.001），没有关闭正则化或训练第二个模型的入口，0.87 与 +8.0 点无实现/指标来源，MAJOR 成立。"
+        },
+        {
+          "title": "默认命令无随机种子，两次重跑指标不同，与 README/论文的可复现宣称矛盾",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "run_experiment.py:19 的 --seed 默认 None，:22 使用无种子 random.Random()；Host run-metrics 两次同一命令 exitCode=0 分别得到 accuracy=0.8700 与 0.7900，metrics.json:20 seed=null、report.html:102 写 not fixed，README.md:55-56 与 paper.md:64-65 的确定性/可复现宣称不成立，MAJOR 成立。"
+        },
+        {
+          "title": "figures/metrics-chart.png 硬编码 0.95 等报告草稿数字，与同页 metrics.json 表格矛盾",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "make_figures.py:19 硬编码 REPORTED={accuracy:0.95, precision:0.94, recall:0.96, f1:0.95}，:221 将其传给 draw_metrics_chart 而非 metrics.json（:222 仅混淆矩阵读文件）；代表图 r1-s1-metrics-chart.png 柱值确为 0.95/0.94/0.96/0.95，而 report.html:50-53 卡片与 r1-s3-report.png 为 0.8500/0.8511/0.8333/0.8421，同页自相矛盾，MAJOR 成立。"
+        },
+        {
+          "title": "row_id 作为数值特征参与选择与训练，ID/顺序信息泄漏随时间漂移的标签",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "model.py:17 的 FEATURE_POOL 含 row_id，:30 载入、:59-60 参与相关性排序；metrics.json:11-14 的 features 为 f1,f2,f3,row_id；README.md:26 定义 row_id 为 record identifier，data.csv:2 起 row_id 与 timestamp 同步递增，README.md:31-32 又说明标签随时间漂移，行号/顺序信息泄漏成立，MAJOR 成立。"
+        },
+        {
+          "title": "p < 0.05 的 paired bootstrap 显著性结论无代码、无基线预测、无置信区间",
+          "severity": "MAJOR",
+          "supported": true,
+          "note": "paper.md:55-58 宣称 paired bootstrap 得到 p<0.05 且不报 CI；全项目 *.py 检索 bootstrap|p_value|ttest|confidence 无命中，仓库无 baseline 预测或任何检验实现，metrics.json:16-17 只有单次 100 行 test 且 seed=null，p 值与显著性结论无来源，MAJOR 成立。"
+        }
+      ],
+      "deductions": [
+        {
+          "points": 10,
+          "reason": "BLOCKER F1：model.py:155-157 在 :158 split 之前用全量数据做特征选择与标准化，测试集标签/分布进入训练前处理，指标被系统性高估。",
+          "fix": "先按时间切出 train/test，仅在 train 上调用 select_features/fit_scaler，再对 test 做 transform。"
+        },
+        {
+          "points": 10,
+          "reason": "BLOCKER F2：model.py:86-89 对时间有序数据随机打乱 75/25，未来样本进入训练集；data.csv 前后 200 行正例率 37.0% vs 52.5% 证明时间漂移真实存在。",
+          "fix": "改为按 timestamp 前 75%/后 25% 切分或 rolling/out-of-time 验证，并在论文中明确评估的是时间外推。"
+        },
+        {
+          "points": 10,
+          "reason": "BLOCKER F3：README.md:46-49/paper.md:9-11 的 0.95 与 metrics.json:2 的 0.85 不一致；Host 两次 run-metrics 仅得 0.8200/0.8300，0.95 在现有代码下不可复现。",
+          "fix": "以固定 seed 重跑生成的 metrics.json 为唯一真实指标源，重写 README/论文/report/图表中的全部数字并删除 0.95/0.94/0.96 等未复现值。"
+        },
+        {
+          "points": 5,
+          "reason": "MAJOR F4：paper.md:54-55/README.md:49 的 baseline 0.87 与 +8.0 点在仓库中没有实现，*.py 中无 baseline/unregular 代码，model.py:22/115 始终施加 L2。",
+          "fix": "在同一 split/特征上实现未正则化 baseline 并报告两模型指标，或删除 0.87 与 +8.0 点的对比宣称。"
+        },
+        {
+          "points": 5,
+          "reason": "MAJOR F5：run_experiment.py:19 默认 --seed None 且 :22 未播种，Host 两次复跑 0.8200/0.8300 不一致，与 README.md:54-56/paper.md:64-65 的可复现宣称矛盾。",
+          "fix": "默认固定并记录 seed（或在 modeling-run.json 显式传 --seed），提交由该固定命令生成的 metrics.json，并确保连续两次重跑逐字段一致。"
+        },
+        {
+          "points": 5,
+          "reason": "MAJOR F6：make_figures.py:19/221 硬编码 REPORTED，report.html:50 卡片 0.8500 与同页 Figure 1 的 0.95 自相矛盾，图表无法由 metrics.json 重建。",
+          "fix": "删除 REPORTED 硬编码，metrics-chart 从 metrics.json 读取同一组指标并重新生成 PNG 与报告。"
+        },
+        {
+          "points": 5,
+          "reason": "MAJOR F7：model.py:17/30/59-62 将 row_id 作为普通数值特征并使其入选，ID 与时间/漂移标签耦合，测试指标被高估且无法推广到新记录。",
+          "fix": "从 FEATURE_POOL 移除 row_id（及 timestamp 等 ID/时间列），只用可解释的客户特征。"
+        },
+        {
+          "points": 5,
+          "reason": "MAJOR F8：paper.md:55-58 的 p<0.05 无任何检验代码/基线预测/置信区间，*.py 中 grep bootstrap/p_value 无命中。",
+          "fix": "实现 paired bootstrap 并报告命令与 CI，或删除 p<0.05 与『统计显著』的定量宣称。"
+        },
+        {
+          "points": 2.5,
+          "reason": "证据覆盖不足：pdf-text 仅覆盖 paper.pdf 第 1/2 页（Table 1 在页 2 未覆盖），report 截图止于首屏（run configuration/reproduction 区未覆盖），且无执行日志/interaction 卡。",
+          "fix": "补充 paper 第 2 页 pdf-text 卡、report 整页或运行配置区截图，并增加一次 run-metrics 执行日志/指标对比证据卡。"
+        },
+        {
+          "points": 12,
+          "reason": "F1 BLOCKER：特征选择/标准化在 split 前用全量数据拟合（model.py:155-158），测试信息进入训练前处理，指标被系统性高估。",
+          "fix": "先按时间切出 train/test，再只在 train 上 select_features/fit_scaler，test 仅 transform。"
+        },
+        {
+          "points": 12,
+          "reason": "F2 BLOCKER：时间有序数据随机 shuffle 划分（model.py:84-89），未来样本进入训练集，评估的是内插而非时间外推。",
+          "fix": "按 timestamp 切分或采用 rolling/out-of-time 验证，并在报告中明确评估口径。"
+        },
+        {
+          "points": 12,
+          "reason": "F3 BLOCKER：README/论文/图表宣称 0.95/0.94/0.96/0.95，而 metrics.json 为 0.85/0.8511/0.8333/0.8421，Host 两次重跑 0.87/0.79，均无法复现 0.95。",
+          "fix": "用固定 seed 重跑生成同一 metrics.json，并据此重写 README、论文、报告和图表，删除不可复现的 0.95 等数字。"
+        },
+        {
+          "points": 5,
+          "reason": "F4 MAJOR：论文/README 宣称未正则化 baseline 0.87、+8.0 点，但仓库没有 baseline 实现或指标来源。",
+          "fix": "在同一 split/同一特征上实现并报告未正则化 baseline，或删除 0.87 与 +8.0 点宣称。"
+        },
+        {
+          "points": 5,
+          "reason": "F5 MAJOR：默认 seed=None（run_experiment.py:19,22），Host 两次重跑得到 0.87 与 0.79，metrics.json seed=null，确定性宣称不成立。",
+          "fix": "默认固定并记录 seed（或在 modeling-run.json 显式传 --seed），提交由该固定命令生成的 metrics.json。"
+        },
+        {
+          "points": 5,
+          "reason": "F6 MAJOR：metrics-chart 使用 make_figures.py:19 的硬编码 0.95/0.94/0.96/0.95（:221），与 report.html:50-53 的 0.85 指标同页矛盾。",
+          "fix": "删除 REPORTED 硬编码，让图表从 metrics.json 读取同一组指标并重新生成 PNG/报告。"
+        },
+        {
+          "points": 5,
+          "reason": "F7 MAJOR：row_id 作为特征进入 FEATURE_POOL（model.py:17）并被选入最终特征（metrics.json:11-14），泄漏时间漂移标签。",
+          "fix": "从 FEATURE_POOL 移除 row_id 及 ID/时间列，重新训练并更新所有指标与图表。"
+        },
+        {
+          "points": 5,
+          "reason": "F8 MAJOR：paper.md:55-58 的 paired bootstrap p<0.05 无任何检验代码、baseline 预测或置信区间支持。",
+          "fix": "实现 paired bootstrap 并报告 CI/重复实验，或删除 p<0.05 与统计显著性宣称。"
+        }
+      ],
+      "mustFix": [
+        "先切分后预处理：仅用 train 拟合特征选择与 scaler，再 transform test（model.py:155-158）",
+        "按 timestamp 做时间切分或 rolling/out-of-time 验证，替代随机打乱（model.py:84-89）",
+        "以固定 seed 重跑生成唯一 metrics.json，统一 README/paper/report/图表数字并删除 0.95 等未复现值",
+        "实现未正则化 baseline 并报告可比指标，或删除 0.87/+8.0 点宣称（paper.md:54-55）",
+        "默认固定并记录 seed，确保连续两次命令重跑结果一致（run_experiment.py:19-24）",
+        "删除 make_figures.py:19 的 REPORTED 硬编码，metrics-chart 从 metrics.json 生成",
+        "从 FEATURE_POOL 移除 row_id（及 timestamp），避免 ID/时间泄漏（model.py:17）",
+        "实现 paired bootstrap/CI 并给出命令，或删除 p<0.05 显著性宣称（paper.md:55-58）",
+        "BLOCKER F1：先切分数据，再仅在 train 上拟合特征选择与标准化，消除测试集泄漏（model.py:155-158）。",
+        "BLOCKER F2：按 timestamp 切分或采用 out-of-time 验证时间有序数据，禁止随机 shuffle（model.py:84-89）。",
+        "BLOCKER F3：用固定 seed 重跑生成 metrics.json，并统一 README、论文、report 与图表的指标，删除不可复现的 0.95/0.94/0.96/0.95。",
+        "MAJOR F4：实现未正则化 baseline 并在同一 split 报告对比，或删除 0.87/+8.0 点宣称（paper.md:54-55、README.md:49）。",
+        "MAJOR F5：默认固定并记录 seed（run_experiment.py:19,22），提交该命令生成的 metrics.json（seed 不为 null）。",
+        "MAJOR F6：metrics-chart 改为从 metrics.json 读取数据，删除 REPORTED 硬编码（make_figures.py:19,221）并重新生成图表与报告。",
+        "MAJOR F7：从 FEATURE_POOL 移除 row_id（及 ID/时间列），重新训练并更新指标（model.py:17）。",
+        "MAJOR F8：实现 paired bootstrap 与置信区间并给出可复现输出，或删除 p<0.05 与统计显著性宣称（paper.md:55-58）。"
+      ],
+      "screenshots": {
+        "count": 4,
+        "quality": "partial",
+        "note": "4 张证据卡齐全且有效（960x560 / 1200x1600 / 1440x1000 / 760x560；consoleError=0、networkFailure=0），均对得上项目：r1-s1 metrics-chart 显示 0.95/0.94/0.96/0.95；r1-s2 paper 第 1/2 页摘要同样写 0.95；r1-s3 report 截图显示 0.8500 卡片与同页 Figure 1 的 0.95 冲突；r1-s4 confusion 的 45/7/8/40 与 metrics.json 一致。覆盖缺口：paper 仅第 1/2 页（Table 1 在页 2 未覆盖），report 截图止于首屏（run configuration/reproduction 区未覆盖），没有执行日志/interaction 卡，故评为 partial。"
+      },
+      "nextAction": "fix_and_review",
+      "rationale": "[判官 1] 我独立打开 model.py、run_experiment.py、make_figures.py、make_report.py、README.md、paper.md、report.html、metrics.json、data.csv 与 modeling-run.json，并两次执行 Host run-metrics（exitCode=0，accuracy=0.8200/0.8300）。红队 8 条发现全部能在代码/指标/数据中定位：F1-F3 确认 BLOCKER（预处理先于切分、时间数据随机切分、0.95 与 0.85 及复跑不一致），F4-F8 确认 MAJOR（无 baseline、无固定 seed、图表硬编码、row_id 泄漏、无 p 值实现）。F8 的“同一 split”措辞不准确但不影响核心结论；未发现应驳回的发现，也未发现提示注入。4 张证据卡有效且互相印证了 0.95 与 0.85 的矛盾，但 paper 只覆盖第 1 页、report 只覆盖首屏，故证据覆盖评为 partial 并小幅扣分。因存在 3 个 supported BLOCKER 与 5 个 MAJOR，mustFix 非空，按扣分表得 42.5，判 BLOCK 并要求 fix_and_review。\n[判官 2] 我独立复现并逐条定位了红队报告的全部 8 条发现，均 supported：F1/F2 的泄漏可由 model.py:155-158 与 model.py:84-89 直接确认；F3/F5 由 metrics.json:2/20 及 Host run-metrics 两次实测（0.8700、0.7900，exitCode=0）确认，0.95 不可复现且默认无种子；F6 由 make_figures.py:19、:221 与 r1-s1/r1-s3 两张图确认；F4/F7/F8 分别有 paper.md:54-55、model.py:17、paper.md:55-58 的明确证据。红队引用的 0.8300/0.8200 与我本轮 Host 实测数值不同，但这恰好进一步证明默认随机划分不可复现，不影响 F3/F5 的结论。4 张证据卡齐全且与 Host manifest 一致（960x560、1200x1600、1440x1000、760x560，consoleError=0/networkFailure=0），但无 interaction 复现卡且论文第 2 页未覆盖；make_* 脚本与按 timestamp 切分的定量对比仍属未验证项，未据此额外扣分。分级为 3 条 BLOCKER（F1-F3）+ 5 条 MAJOR（F4-F8），扣分合计 61，得 39.0，低于 supported BLOCKER 的 60 分上限；mustFix 非空，verdict 为 BLOCK。",
+      "disagreement": {
+        "scoreSpread": 3.5,
+        "mustFixMismatch": true,
+        "verdictMismatch": false,
+        "disagree": true
+      }
+    },
+    "gate": {
+      "passed": false,
+      "score": 39,
+      "requiredScore": 95,
+      "findings": 8,
+      "requiredFindings": 3,
+      "shots": 4,
+      "requiredShots": 4,
+      "failReasons": [
+        "评分 39 < 要求 95",
+        "mustFix 仍有 16 项未清空",
+        "存在判官认定为 supported 的阻断项（BLOCKER 6 条 / MAJOR 10 条），必须修复后重评"
+      ]
+    },
+    "shots": [
+      {
+        "file": "r1-s1-metrics-chart.png",
+        "width": 960,
+        "height": 560,
+        "bytes": 7324,
+        "sha256": "43a02d9a886958d7077788c1e2e120d22466b24b8c71eaebf2485d273000367d"
+      },
+      {
+        "file": "r1-s2-paper.png",
+        "width": 1200,
+        "height": 1600,
+        "bytes": 118967,
+        "sha256": "22a4bebdfec68161c784969b532a05219d557fe2938bea4398111b96e97fae3d"
+      },
+      {
+        "file": "r1-s3-report.png",
+        "width": 1440,
+        "height": 1000,
+        "bytes": 55325,
+        "sha256": "69bdd8a71b071faefaafe741c69ca22a5be4f38d49d359cfc45c73862d4795de"
+      },
+      {
+        "file": "r1-s4-confusion.png",
+        "width": 760,
+        "height": 560,
+        "bytes": 5151,
+        "sha256": "5edde1fa59cec7450cc17e7202d3049ee2c9dfc24fba0dfbba63de151c14201e"
+      }
+    ],
+    "evidence": [
+      {
+        "index": 0,
+        "name": "metrics-chart",
+        "kind": "image",
+        "artifacts": [
+          {
+            "file": "r1-s1-metrics-chart.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdotvo2-j4zu65\\r1-s1-metrics-chart.png",
+            "width": 960,
+            "height": 560,
+            "bytes": 7324,
+            "sha256": "43a02d9a886958d7077788c1e2e120d22466b24b8c71eaebf2485d273000367d",
+            "mime": "image/png",
+            "kind": "image",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "",
+          "page": "figures/metrics-chart.png",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      },
+      {
+        "index": 1,
+        "name": "paper",
+        "kind": "pdf-text",
+        "artifacts": [
+          {
+            "file": "r1-s2-paper.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdotvo2-j4zu65\\r1-s2-paper.png",
+            "width": 1200,
+            "height": 1600,
+            "bytes": 118967,
+            "sha256": "22a4bebdfec68161c784969b532a05219d557fe2938bea4398111b96e97fae3d",
+            "mime": "image/png",
+            "kind": "pdf-text",
+            "stepName": null
+          },
+          {
+            "file": "r1-s2-pdf.txt",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdotvo2-j4zu65\\r1-s2-pdf.txt",
+            "width": 0,
+            "height": 0,
+            "bytes": 2255,
+            "sha256": "ca8822bae3fa0cdbb0311090f1f79518878d93b718224e420b36afa5776ffb1b",
+            "mime": "text/plain",
+            "kind": "text",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "",
+          "page": 1,
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": [],
+          "pageCount": 2,
+          "extractedChars": 2114,
+          "truncated": false,
+          "pdfSha256": "82046c0a04a01209e86a74500e5a660dcf59f4717133d9a7c63f2f7ed6171274"
+        }
+      },
+      {
+        "index": 2,
+        "name": "report",
+        "kind": "screenshot",
+        "artifacts": [
+          {
+            "file": "r1-s3-report.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdotvo2-j4zu65\\r1-s3-report.png",
+            "width": 1440,
+            "height": 1000,
+            "bytes": 55325,
+            "sha256": "69bdd8a71b071faefaafe741c69ca22a5be4f38d49d359cfc45c73862d4795de",
+            "mime": "image/png",
+            "kind": "screenshot",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "file:///C:/Users/zl/Documents/deepseek-harness/default-workspace/redteam-console/benchmarks/modeling-seeded/report.html",
+          "page": "report.html",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      },
+      {
+        "index": 3,
+        "name": "confusion",
+        "kind": "image",
+        "artifacts": [
+          {
+            "file": "r1-s4-confusion.png",
+            "path": "C:\\Users\\zl\\.dsh\\adversarial-review\\shots\\c-mvdotvo2-j4zu65\\r1-s4-confusion.png",
+            "width": 760,
+            "height": 560,
+            "bytes": 5151,
+            "sha256": "5edde1fa59cec7450cc17e7202d3049ee2c9dfc24fba0dfbba63de151c14201e",
+            "mime": "image/png",
+            "kind": "image",
+            "stepName": null
+          }
+        ],
+        "meta": {
+          "url": "",
+          "page": "figures/confusion.png",
+          "console": {
+            "events": [],
+            "errors": 0,
+            "truncated": false
+          },
+          "network": {
+            "requests": 0,
+            "failures": 0,
+            "truncated": false,
+            "failureSamples": []
+          },
+          "perf": {
+            "metrics": {},
+            "fps": null
+          },
+          "steps": []
+        }
+      }
+    ],
+    "judges": [
+      {
+        "index": 0,
+        "sessionId": "cc3412ff-f7d5-4b68-827c-7bfb2bb4a911",
+        "score": 42.5,
+        "rawScore": 42.5,
+        "verdict": "BLOCK",
+        "findingsCount": 8,
+        "supportedCount": 8,
+        "mustFix": [
+          "先切分后预处理：仅用 train 拟合特征选择与 scaler，再 transform test（model.py:155-158）",
+          "按 timestamp 做时间切分或 rolling/out-of-time 验证，替代随机打乱（model.py:84-89）",
+          "以固定 seed 重跑生成唯一 metrics.json，统一 README/paper/report/图表数字并删除 0.95 等未复现值",
+          "实现未正则化 baseline 并报告可比指标，或删除 0.87/+8.0 点宣称（paper.md:54-55）",
+          "默认固定并记录 seed，确保连续两次命令重跑结果一致（run_experiment.py:19-24）",
+          "删除 make_figures.py:19 的 REPORTED 硬编码，metrics-chart 从 metrics.json 生成",
+          "从 FEATURE_POOL 移除 row_id（及 timestamp），避免 ID/时间泄漏（model.py:17）",
+          "实现 paired bootstrap/CI 并给出命令，或删除 p<0.05 显著性宣称（paper.md:55-58）"
+        ],
+        "deductions": [
+          {
+            "points": 10,
+            "reason": "BLOCKER F1：model.py:155-157 在 :158 split 之前用全量数据做特征选择与标准化，测试集标签/分布进入训练前处理，指标被系统性高估。",
+            "fix": "先按时间切出 train/test，仅在 train 上调用 select_features/fit_scaler，再对 test 做 transform。"
+          },
+          {
+            "points": 10,
+            "reason": "BLOCKER F2：model.py:86-89 对时间有序数据随机打乱 75/25，未来样本进入训练集；data.csv 前后 200 行正例率 37.0% vs 52.5% 证明时间漂移真实存在。",
+            "fix": "改为按 timestamp 前 75%/后 25% 切分或 rolling/out-of-time 验证，并在论文中明确评估的是时间外推。"
+          },
+          {
+            "points": 10,
+            "reason": "BLOCKER F3：README.md:46-49/paper.md:9-11 的 0.95 与 metrics.json:2 的 0.85 不一致；Host 两次 run-metrics 仅得 0.8200/0.8300，0.95 在现有代码下不可复现。",
+            "fix": "以固定 seed 重跑生成的 metrics.json 为唯一真实指标源，重写 README/论文/report/图表中的全部数字并删除 0.95/0.94/0.96 等未复现值。"
+          },
+          {
+            "points": 5,
+            "reason": "MAJOR F4：paper.md:54-55/README.md:49 的 baseline 0.87 与 +8.0 点在仓库中没有实现，*.py 中无 baseline/unregular 代码，model.py:22/115 始终施加 L2。",
+            "fix": "在同一 split/特征上实现未正则化 baseline 并报告两模型指标，或删除 0.87 与 +8.0 点的对比宣称。"
+          },
+          {
+            "points": 5,
+            "reason": "MAJOR F5：run_experiment.py:19 默认 --seed None 且 :22 未播种，Host 两次复跑 0.8200/0.8300 不一致，与 README.md:54-56/paper.md:64-65 的可复现宣称矛盾。",
+            "fix": "默认固定并记录 seed（或在 modeling-run.json 显式传 --seed），提交由该固定命令生成的 metrics.json，并确保连续两次重跑逐字段一致。"
+          },
+          {
+            "points": 5,
+            "reason": "MAJOR F6：make_figures.py:19/221 硬编码 REPORTED，report.html:50 卡片 0.8500 与同页 Figure 1 的 0.95 自相矛盾，图表无法由 metrics.json 重建。",
+            "fix": "删除 REPORTED 硬编码，metrics-chart 从 metrics.json 读取同一组指标并重新生成 PNG 与报告。"
+          },
+          {
+            "points": 5,
+            "reason": "MAJOR F7：model.py:17/30/59-62 将 row_id 作为普通数值特征并使其入选，ID 与时间/漂移标签耦合，测试指标被高估且无法推广到新记录。",
+            "fix": "从 FEATURE_POOL 移除 row_id（及 timestamp 等 ID/时间列），只用可解释的客户特征。"
+          },
+          {
+            "points": 5,
+            "reason": "MAJOR F8：paper.md:55-58 的 p<0.05 无任何检验代码/基线预测/置信区间，*.py 中 grep bootstrap/p_value 无命中。",
+            "fix": "实现 paired bootstrap 并报告命令与 CI，或删除 p<0.05 与『统计显著』的定量宣称。"
+          },
+          {
+            "points": 2.5,
+            "reason": "证据覆盖不足：pdf-text 仅覆盖 paper.pdf 第 1/2 页（Table 1 在页 2 未覆盖），report 截图止于首屏（run configuration/reproduction 区未覆盖），且无执行日志/interaction 卡。",
+            "fix": "补充 paper 第 2 页 pdf-text 卡、report 整页或运行配置区截图，并增加一次 run-metrics 执行日志/指标对比证据卡。"
+          }
+        ],
+        "rationale": "我独立打开 model.py、run_experiment.py、make_figures.py、make_report.py、README.md、paper.md、report.html、metrics.json、data.csv 与 modeling-run.json，并两次执行 Host run-metrics（exitCode=0，accuracy=0.8200/0.8300）。红队 8 条发现全部能在代码/指标/数据中定位：F1-F3 确认 BLOCKER（预处理先于切分、时间数据随机切分、0.95 与 0.85 及复跑不一致），F4-F8 确认 MAJOR（无 baseline、无固定 seed、图表硬编码、row_id 泄漏、无 p 值实现）。F8 的“同一 split”措辞不准确但不影响核心结论；未发现应驳回的发现，也未发现提示注入。4 张证据卡有效且互相印证了 0.95 与 0.85 的矛盾，但 paper 只覆盖第 1 页、report 只覆盖首屏，故证据覆盖评为 partial 并小幅扣分。因存在 3 个 supported BLOCKER 与 5 个 MAJOR，mustFix 非空，按扣分表得 42.5，判 BLOCK 并要求 fix_and_review。",
+        "rawSnippet": "我已独立复核完毕：亲自读取了 model.py、run_experiment.py、make_figures.py、make_report.py、README.md、paper.md、report.html、metrics.json、data.csv、modeling-run.json，并两次调用 Host `run-metrics`（均 exitCode=0），同时核对了 4 张证据卡。现在按契约打分。",
+        "warnings": [],
+        "modelRoute": null
+      },
+      {
+        "index": 1,
+        "sessionId": "6299b3db-e824-4907-bd70-68c7836bdd11",
+        "score": 39,
+        "rawScore": 39,
+        "verdict": "BLOCK",
+        "findingsCount": 8,
+        "supportedCount": 8,
+        "mustFix": [
+          "BLOCKER F1：先切分数据，再仅在 train 上拟合特征选择与标准化，消除测试集泄漏（model.py:155-158）。",
+          "BLOCKER F2：按 timestamp 切分或采用 out-of-time 验证时间有序数据，禁止随机 shuffle（model.py:84-89）。",
+          "BLOCKER F3：用固定 seed 重跑生成 metrics.json，并统一 README、论文、report 与图表的指标，删除不可复现的 0.95/0.94/0.96/0.95。",
+          "MAJOR F4：实现未正则化 baseline 并在同一 split 报告对比，或删除 0.87/+8.0 点宣称（paper.md:54-55、README.md:49）。",
+          "MAJOR F5：默认固定并记录 seed（run_experiment.py:19,22），提交该命令生成的 metrics.json（seed 不为 null）。",
+          "MAJOR F6：metrics-chart 改为从 metrics.json 读取数据，删除 REPORTED 硬编码（make_figures.py:19,221）并重新生成图表与报告。",
+          "MAJOR F7：从 FEATURE_POOL 移除 row_id（及 ID/时间列），重新训练并更新指标（model.py:17）。",
+          "MAJOR F8：实现 paired bootstrap 与置信区间并给出可复现输出，或删除 p<0.05 与统计显著性宣称（paper.md:55-58）。"
+        ],
+        "deductions": [
+          {
+            "points": 12,
+            "reason": "F1 BLOCKER：特征选择/标准化在 split 前用全量数据拟合（model.py:155-158），测试信息进入训练前处理，指标被系统性高估。",
+            "fix": "先按时间切出 train/test，再只在 train 上 select_features/fit_scaler，test 仅 transform。"
+          },
+          {
+            "points": 12,
+            "reason": "F2 BLOCKER：时间有序数据随机 shuffle 划分（model.py:84-89），未来样本进入训练集，评估的是内插而非时间外推。",
+            "fix": "按 timestamp 切分或采用 rolling/out-of-time 验证，并在报告中明确评估口径。"
+          },
+          {
+            "points": 12,
+            "reason": "F3 BLOCKER：README/论文/图表宣称 0.95/0.94/0.96/0.95，而 metrics.json 为 0.85/0.8511/0.8333/0.8421，Host 两次重跑 0.87/0.79，均无法复现 0.95。",
+            "fix": "用固定 seed 重跑生成同一 metrics.json，并据此重写 README、论文、报告和图表，删除不可复现的 0.95 等数字。"
+          },
+          {
+            "points": 5,
+            "reason": "F4 MAJOR：论文/README 宣称未正则化 baseline 0.87、+8.0 点，但仓库没有 baseline 实现或指标来源。",
+            "fix": "在同一 split/同一特征上实现并报告未正则化 baseline，或删除 0.87 与 +8.0 点宣称。"
+          },
+          {
+            "points": 5,
+            "reason": "F5 MAJOR：默认 seed=None（run_experiment.py:19,22），Host 两次重跑得到 0.87 与 0.79，metrics.json seed=null，确定性宣称不成立。",
+            "fix": "默认固定并记录 seed（或在 modeling-run.json 显式传 --seed），提交由该固定命令生成的 metrics.json。"
+          },
+          {
+            "points": 5,
+            "reason": "F6 MAJOR：metrics-chart 使用 make_figures.py:19 的硬编码 0.95/0.94/0.96/0.95（:221），与 report.html:50-53 的 0.85 指标同页矛盾。",
+            "fix": "删除 REPORTED 硬编码，让图表从 metrics.json 读取同一组指标并重新生成 PNG/报告。"
+          },
+          {
+            "points": 5,
+            "reason": "F7 MAJOR：row_id 作为特征进入 FEATURE_POOL（model.py:17）并被选入最终特征（metrics.json:11-14），泄漏时间漂移标签。",
+            "fix": "从 FEATURE_POOL 移除 row_id 及 ID/时间列，重新训练并更新所有指标与图表。"
+          },
+          {
+            "points": 5,
+            "reason": "F8 MAJOR：paper.md:55-58 的 paired bootstrap p<0.05 无任何检验代码、baseline 预测或置信区间支持。",
+            "fix": "实现 paired bootstrap 并报告 CI/重复实验，或删除 p<0.05 与统计显著性宣称。"
+          }
+        ],
+        "rationale": "我独立复现并逐条定位了红队报告的全部 8 条发现，均 supported：F1/F2 的泄漏可由 model.py:155-158 与 model.py:84-89 直接确认；F3/F5 由 metrics.json:2/20 及 Host run-metrics 两次实测（0.8700、0.7900，exitCode=0）确认，0.95 不可复现且默认无种子；F6 由 make_figures.py:19、:221 与 r1-s1/r1-s3 两张图确认；F4/F7/F8 分别有 paper.md:54-55、model.py:17、paper.md:55-58 的明确证据。红队引用的 0.8300/0.8200 与我本轮 Host 实测数值不同，但这恰好进一步证明默认随机划分不可复现，不影响 F3/F5 的结论。4 张证据卡齐全且与 Host manifest 一致（960x560、1200x1600、1440x1000、760x560，consoleError=0/networkFailure=0），但无 interaction 复现卡且论文第 2 页未覆盖；make_* 脚本与按 timestamp 切分的定量对比仍属未验证项，未据此额外扣分。分级为 3 条 BLOCKER（F1-F3）+ 5 条 MAJOR（F4-F8），扣分合计 61，得 39.0，低于 supported BLOCKER 的 60 分上限；mustFix 非空，verdict 为 BLOCK。",
+        "rawSnippet": "{\"score\":39,\"verdict\":\"BLOCK\",\"findingsCount\":8,\"validFindings\":[{\"title\":\"特征选择与标准化在 train/test 划分前用全量数据拟合，测试集标签与分布泄漏\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"model.py:155-157 在 model.py:158 的 split_rows 之前调用 select_features(rows)（:57-60 用全量 rows 的 label 计算相关性）和 fit_scaler(rows)（:68-70 用全量 rows 计算 mean/std）；run_experiment.py:27 也把全量 rows 传入 train_and_evaluate，测试标签/分布参与训练前处理，BLOCKER 成立。\"},{\"title\":\"时间有序数据随机打乱 75/25 划分，未来样本进入训练集（时序泄漏）\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"model.py:84-89 的 split_rows 只做 rng.shuffle 后按 75% 切分，全程不用 timestamp；README.md:31-32 与 paper.md:29-31 承认流失率随时间漂移且按采集顺序存储，data.csv:2 起 row_id/timestamp 同步逐日递增，随机划分把未来样本放进训练集，时序泄漏成立，BLOCKER 成立。\"},{\"title\":\"核心指标宣称 0.95/0.94/0.96/0.95 与 metrics.json 及重跑结果严重不符\",\"severity\":\"BLOCKER\",\"supported\":true,\"note\":\"README.md:46-49 与 paper.md:8-11、49-52 宣称 accuracy 0.95、precision 0.94、recall 0.96、F1 0.95；metrics.json:2/18/19/9 实为 0.85/0.8511/0.8333/0.8421；Host review_probe run-metrics 两次执行 [\\\"python\\\",\\\"run_experiment.py\\\"]（exitCode=0）实测 0.8700 与 0.7900，均未达到 0.95（红队引用的 0.8300/0.8200 是同一不稳定命令的另两次结果），核心指标不可复现，BLOCKER 成立。\"},{\"title\":\"论文宣称的未正则化 baseline（accuracy 0.87、+8.0 点）在仓库中没有实现或指标来源\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"paper.md:54-55 与 README.md:49 宣称未正则化 baseline accuracy 0.87、提升 8.0 点；对 *.py 检索 bootstrap|baseline|unregular|ttest|confidence 等无命中，model.py:100-116 的 train_logistic 始终使用 L2（model.py:22 L2=0.001），没有关闭正则化或训练第二个模型的入口，0.87 与 +8.0 点无实现/指标来源，MAJOR 成立。\"},{\"title\":\"默认命令无随机种子，两次重跑指标不同，与 README/论文的可复现宣称矛盾\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"run_experiment.py:19 的 --seed 默认 None，:22 使用无种子 random.Random()；Host run-metrics 两次同一命令 exitCode=0 分别得到 accuracy=0.8700 与 0.7900，metrics.json:20 seed=null、report.html:102 写 not fixed，README.md:55-56 与 paper.md:64-65 的确定性/可复现宣称不成立，MAJOR 成立。\"},{\"title\":\"figures/metrics-chart.png 硬编码 0.95 等报告草稿数字，与同页 metrics.json 表格矛盾\",\"severity\":\"MAJOR\",\"supported\":true,\"note\":\"make_figures.py:19 硬编码 REPORTED={accuracy:0.95, precision:0.94, recall:0.96, f1:0.95…",
+        "warnings": [],
+        "modelRoute": null
+      }
+    ],
+    "disagreement": {
+      "scoreSpread": 3.5,
+      "mustFixMismatch": true,
+      "verdictMismatch": false,
+      "disagree": true
+    },
+    "snapshot": {
+      "manifestHash": "1c071372a50ab4eba07588cece3a05c60ec75a7909523c729d914c2be230aad5",
+      "gitCommit": null,
+      "fileCount": 16,
+      "hashedBytes": 91554,
+      "truncated": false,
+      "skippedCount": 0,
+      "createdAt": 1792319627688
+    }
+  }
+}

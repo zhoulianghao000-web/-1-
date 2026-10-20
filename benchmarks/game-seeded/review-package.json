@@ -1,0 +1,253 @@
+{
+  "fixture": "game-seeded",
+  "title": "游戏基准靶子：月影竞技场 v0.9.1（8 个种子缺陷）",
+  "target": ".",
+  "notes": "v1.2：evidence[] 是 4 张证据卡（脚本化步骤 + console/network/perf 采集，供零依赖 CDP runner 执行）；shots[] 保留为当前工具的 4 张静态截图 fallback（4 个视口）。",
+  "claims": [
+    "README 声称「重开完整重置」：点击重开后分数、HP、击杀与稀有掉落全部清零，并回到可以继续游玩的状态",
+    "README 声称「HP 不会低于 0」：生命值变化有完整下限保护，不会出现负血",
+    "README 与页面顶部都声称稀有掉落率为 20%，且与实现一致",
+    "README 声称「存档可靠」：保存进度会保留分数与 HP，读取后与保存时一致",
+    "README 声称键盘可完整操作：Tab 可切换焦点，空格/回车可触发按钮"
+  ],
+  "focus": [
+    "状态机与重开软锁",
+    "数值下限钳制（HP 负数）",
+    "掉落概率与公示一致性",
+    "存档/读档字段一致性",
+    "前端密钥与客户端直连 API",
+    "资源完整性（坏图）",
+    "输入与可访问性（Tab/空格陷阱）",
+    "主线程性能（perf jank）"
+  ],
+  "outOfScope": "玩法趣味性、难度平衡与美术风格偏好不在本轮范围；主观手感不作为缺陷",
+  "environment": "只读文件浏览 + review_probe；v1.2 evidence runner 在 file:// 下用无头 Chrome 执行 4 张证据卡（交互步骤 + 截图 + console/network/perf 采集）",
+  "timeBudget": "约 15–20 分钟",
+  "evidence": [
+    {
+      "name": "E1",
+      "kind": "interaction",
+      "path": "index.html",
+      "width": 1440,
+      "height": 900,
+      "collect": {
+        "console": true,
+        "network": true,
+        "perf": true
+      },
+      "steps": [
+        {
+          "action": "goto"
+        },
+        {
+          "action": "click",
+          "selector": "#start"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "screenshot",
+          "name": "playing"
+        }
+      ]
+    },
+    {
+      "name": "desktop",
+      "kind": "screenshot",
+      "path": "index.html",
+      "width": 1440,
+      "height": 900,
+      "collect": {
+        "console": true,
+        "network": false,
+        "perf": false
+      },
+      "steps": []
+    },
+    {
+      "name": "E3",
+      "kind": "interaction",
+      "path": "index.html",
+      "width": 1440,
+      "height": 900,
+      "collect": {
+        "console": true,
+        "network": false,
+        "perf": false
+      },
+      "steps": [
+        {
+          "action": "goto"
+        },
+        {
+          "action": "click",
+          "selector": "#start"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "click",
+          "selector": "#attack"
+        },
+        {
+          "action": "screenshot",
+          "name": "gameover"
+        },
+        {
+          "action": "click",
+          "selector": "#restart"
+        },
+        {
+          "action": "screenshot",
+          "name": "after-restart"
+        }
+      ]
+    },
+    {
+      "name": "E4",
+      "kind": "interaction",
+      "path": "index.html",
+      "width": 1440,
+      "height": 900,
+      "collect": {
+        "console": true,
+        "network": true,
+        "perf": false
+      },
+      "steps": [
+        {
+          "action": "goto"
+        },
+        {
+          "action": "click",
+          "selector": "#start"
+        },
+        {
+          "action": "click",
+          "selector": "#save"
+        },
+        {
+          "action": "click",
+          "selector": "#load"
+        },
+        {
+          "action": "screenshot",
+          "name": "save-load"
+        }
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "path": "index.html",
+      "width": 1440,
+      "height": 900,
+      "name": "desktop"
+    },
+    {
+      "path": "index.html",
+      "width": 1280,
+      "height": 800,
+      "name": "laptop"
+    },
+    {
+      "path": "index.html",
+      "width": 768,
+      "height": 1024,
+      "name": "tablet"
+    },
+    {
+      "path": "index.html",
+      "width": 390,
+      "height": 844,
+      "name": "mobile"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "G1",
+      "G2",
+      "G3",
+      "G4",
+      "G5",
+      "G6",
+      "G7",
+      "G8"
+    ]
+  },
+  "evidenceNote": "v1.2 Stage A schema: each card has path + steps (goto uses card path); click.times expanded; stopWhenVisible replaced by fixed 15 attacks (fixture: gameover after 15 attacks)."
+}

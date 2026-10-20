@@ -1,0 +1,61 @@
+{
+  "fixture": "web-blog",
+  "description": "v2.0 校准语料 web-blog：4 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "W6-1",
+      "category": "hardcoded-secret",
+      "severity": "BLOCKER",
+      "path": "assets/app.js",
+      "line": 4,
+      "lines": [
+        4,
+        7
+      ],
+      "description": "前端 app.js 硬编码 API key（sk-corpus-…）并生成 Bearer 认证头，凭据直接暴露给浏览器"
+    },
+    {
+      "id": "W6-2",
+      "category": "broken-image",
+      "severity": "MAJOR",
+      "path": "index.html",
+      "line": 18,
+      "lines": [
+        18
+      ],
+      "description": "主视觉图片引用 assets/img/hero-missing.png，但该文件不存在，坏图保留在 DOM 中"
+    },
+    {
+      "id": "W6-3",
+      "category": "missing-aria-live",
+      "severity": "MINOR",
+      "path": "index.html",
+      "line": 20,
+      "lines": [
+        20
+      ],
+      "description": "状态提示元素没有 role=\"status\"/aria-live，JavaScript 动态更新不会被读屏软件播报"
+    },
+    {
+      "id": "W6-4",
+      "category": "dead-link",
+      "severity": "MINOR",
+      "path": "index.html",
+      "line": 22,
+      "lines": [
+        22
+      ],
+      "description": "导航链接指向不存在的 pricing.html，点击得到死链"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "W6-1",
+      "W6-2",
+      "W6-3",
+      "W6-4"
+    ]
+  }
+}

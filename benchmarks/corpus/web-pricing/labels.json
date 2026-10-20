@@ -1,0 +1,48 @@
+{
+  "fixture": "web-pricing",
+  "description": "v2.0 校准语料 web-pricing：3 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "W3-1",
+      "category": "undefined-function",
+      "severity": "MAJOR",
+      "path": "assets/app.js",
+      "line": 10,
+      "lines": [
+        10
+      ],
+      "description": "按钮点击处理调用未定义的 refreshStats()，点击后抛 ReferenceError，状态更新中断"
+    },
+    {
+      "id": "W3-2",
+      "category": "dead-link",
+      "severity": "MINOR",
+      "path": "index.html",
+      "line": 26,
+      "lines": [
+        26
+      ],
+      "description": "导航链接指向不存在的 pricing.html，点击得到死链"
+    },
+    {
+      "id": "W3-3",
+      "category": "form-no-action",
+      "severity": "MINOR",
+      "path": "index.html",
+      "line": 21,
+      "lines": [
+        21
+      ],
+      "description": "订阅表单既没有 action，也没有提交处理，提交后页面回到同页并丢失输入"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "W3-1",
+      "W3-2",
+      "W3-3"
+    ]
+  }
+}

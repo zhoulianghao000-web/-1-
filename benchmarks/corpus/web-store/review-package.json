@@ -1,0 +1,60 @@
+{
+  "fixture": "web-store",
+  "title": "陶土商店 · 商品页（v2.0 校准语料）",
+  "target": ".",
+  "notes": "由 benchmarks/corpus/generate.mjs 自动生成；4 个既有 fixture + 16 个合成语料共 20 个项目。合成语料含故意注入的种子缺陷，不要用手工修改生成文件（--check 会失败）。",
+  "claims": [
+    "订阅表单可以正常提交并给出反馈（不会回到同页或丢失输入）",
+    "无障碍达标：所有图片都提供替代文本（alt）",
+    "所有按钮交互均正常，浏览器控制台没有任何未捕获错误",
+    "390px 移动端视口可完整浏览，没有横向滚动条"
+  ],
+  "focus": [
+    "前端密钥",
+    "未捕获的 JS 错误",
+    "资源完整性（坏图）",
+    "表单/链接行为",
+    "可访问性（alt / aria-live）",
+    "移动端布局溢出",
+    "README 宣称与实现一致性"
+  ],
+  "outOfScope": "视觉设计偏好、文案风格、功能丰富度不在本轮范围；纯主观审美不作为缺陷",
+  "environment": "只读文件浏览 + review_probe；无浏览器控制（静态站点由 Host 按 4 个视口截图）",
+  "timeBudget": "约 10–15 分钟",
+  "shots": [
+    {
+      "path": "index.html",
+      "width": 1440,
+      "height": 900,
+      "name": "desktop"
+    },
+    {
+      "path": "index.html",
+      "width": 1280,
+      "height": 800,
+      "name": "laptop"
+    },
+    {
+      "path": "index.html",
+      "width": 768,
+      "height": 1024,
+      "name": "tablet"
+    },
+    {
+      "path": "index.html",
+      "width": 390,
+      "height": 844,
+      "name": "mobile"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "W7-1",
+      "W7-2",
+      "W7-3",
+      "W7-4"
+    ]
+  }
+}

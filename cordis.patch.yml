@@ -1,0 +1,137 @@
+# 红队评审台 bundle 层：
+#   1) Host 插件行（工具 + 截图 + 状态/HTTP + 门控 guard + 系统提示）
+#   2) 两个互相独立的 Agent 预设：红队（只证伪、只读）与判官（只打分、只读）
+# 安装：plugin_manager install_bundle，target 为本目录。
+- insert:
+    - id: adversarial-review-console
+      name: '@local/dsh-redteam-console'
+      config:
+        enabled: true
+        requiredScore: 95
+        requiredFindings: 3
+        requiredShots: 4
+        maxRounds: 40
+        roundTimeoutSeconds: 1800
+        childProvider: spawn
+        attackerPreset: redteam-console
+        judgePreset: redteam-console
+        # v1.1 双判官：默认 2 个独立判官会话（1–3），分数取较低中位数保守聚合。
+        judgeSamples: 2
+        # 最终自评审临时路由：V4Pro（deepseek-account 路由；若不可用自动回退并记 warnings）。
+        attackerProvider: deepseek-account
+        attackerModel: deepseek-v4-pro
+        attackerReasoningEffort: ''
+        judgeProvider: deepseek-account
+        judgeModel: deepseek-v4-pro
+        judgeReasoningEffort: ''
+        # v2.0 完成门禁作用域：空 = 本会话评审过的全部交付根；建议按部署改为
+        # 只列真实交付项目的绝对路径，避免校准 fixture / 演示副本的故意失败轮
+        # 永久阻塞 update_goal(complete)。profile 层可覆盖此键。
+        goalGateRoots: []
+        # v2.0 多模型判官（可选，最多 3 项）：judgeModels[i] 覆盖第 i 个判官样本的默认路由；
+        # 未配置的样本继承上面 judgeProvider/judgeModel/judgeReasoningEffort；多于 judgeSamples 的项被忽略。
+        # 留空/注释掉即全部继承父会话路由。示例：
+        # judgeModels:
+        #   - provider: deepseek
+        #     model: deepseek-flash
+        #   - provider: deepseek
+        #     model: deepseek-reasoner
+        #     reasoningEffort: high
+        chromePath: ''
+        # v1.1 1.4：stateDir 默认 '' → $DSH_HOME/adversarial-review（state 在宿主家目录，
+        # 不放在可写的 workspace 里；demo 证据如需展示可复制/软链，但可写目录不参与信任判断）。
+        stateDir: ''
+        # v1.1 1.3：声明的交付根（空 = target 自身即交付根）。示例：
+        #   deliverableRoots: ['C:\Users\zl\Documents\deepseek-harness\default-workspace']
+        # target 必须位于某个 root 内；同一交付根只允许一个评审 target。
+        deliverableRoots: []
+        # v1.1 1.4：允许截图的额外 origin（loopback 127.0.0.1 / ::1 / localhost 始终允许）。示例：
+        #   allowedOrigins: ['http://127.0.0.1:3000']
+        allowedOrigins: []
+        # v1.1 1.3 / v2.0：项目快照上限（哈希文件数 / 哈希总字节数 / 单文件上限）。
+        # 覆盖率不足的快照会让 guard fail-closed（禁止交付），必要时调高并重新评审。
+        snapshotMaxFiles: 20000
+        snapshotMaxHashBytes: 536870912
+        snapshotMaxFileBytes: 67108864
+        announceToAgent: true
+        enforceGoalGate: true
+        enforceGateOnPresent: true
+        screenshotTimeoutSeconds: 90
+        # v1.1 1.5：评审者（红队/判官）硬只读。guard 对运行中的评审子会话拒绝
+        # shell/写/交付/结束目标等危险工具，并把文件读取限制在被评审项目内；
+        # 调试时可置 false 关闭该增强（预设本身已不挂载 shell/网络工具）。
+        readOnlyReviewers: true
+        # review_probe 上限：run-tests 在只读临时副本执行，超时终止进程树；
+        # 副本预算超限时先跳过 node_modules，仍超限则拒绝执行测试。
+        probeTimeoutSeconds: 120
+        probeMaxCopyBytes: 104857600
+        probeMaxCopyFiles: 20000
+
+    - id: preset-redteam-console
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: redteam-console
+        name: 红队评审台 v2.0（对抗挑刺 + 独立评分）
+        description: 统一模式：主会话可读写/执行命令，并用 adversarial_review_round 组织红队挑刺与独立判官评分；被评审台作为红队/判官子智能体启动时由 Host guard 强制只读。
+        order: 11
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |
+                你是「红队评审台」模式（v2.0）。
+
+                主会话职责：在交付/验收/完成项目之前，调用 Host 工具 adversarial_review_round（target 绝对路径 + claims/focus/证据），按返回的 gate 与 mustFix/扣分项组织修复，并持续复评直到 gate.passed=true。主会话可以读写项目、运行命令、安装依赖。
+
+                当本模式被评审台作为红队或判官子智能体启动时，以当轮任务提示里的角色说明为准；Host tools.guard 会把评审子会话强制为只读（拒绝 shell/写/交付/结束目标等），此时不要尝试修改文件，使用 review_probe 做只读检查，并严格按任务要求的 JSON 契约收尾。
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              read: true
+              readImage: true
+              write: true
+              edit: true
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024

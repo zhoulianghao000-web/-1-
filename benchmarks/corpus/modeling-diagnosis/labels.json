@@ -1,0 +1,60 @@
+{
+  "fixture": "modeling-diagnosis",
+  "description": "v2.0 校准语料 modeling-diagnosis：4 个已知缺陷（路径与行号由生成器从同一份模板计算）。",
+  "labels": [
+    {
+      "id": "MO3-1",
+      "category": "data-leakage",
+      "severity": "BLOCKER",
+      "path": "model.py",
+      "line": 40,
+      "lines": [
+        40
+      ],
+      "description": "model.py 在 train/test 划分之前用全量 rows 拟合 scaler（fit_scaler(rows)），测试集信息泄漏进训练流程"
+    },
+    {
+      "id": "MO3-2",
+      "category": "leakage-claim-mismatch",
+      "severity": "MAJOR",
+      "path": "paper.md",
+      "line": 10,
+      "lines": [
+        10
+      ],
+      "description": "论文声称「先划分训练/测试，再做标准化」，但 model.py 实际在划分前用全量数据拟合 scaler"
+    },
+    {
+      "id": "MO3-3",
+      "category": "figure-inconsistency",
+      "severity": "MAJOR",
+      "path": "report.html",
+      "line": 18,
+      "lines": [
+        18
+      ],
+      "description": "report.html 的 accuracy 表格展示 0.95，而 metrics.json 实测 0.85；图表也按 0.95 绘制，表格/图表/指标三者不一致"
+    },
+    {
+      "id": "MO3-4",
+      "category": "missing-baseline",
+      "severity": "MAJOR",
+      "path": "paper.md",
+      "line": 15,
+      "lines": [
+        15
+      ],
+      "description": "论文声称优于 baseline（baseline 0.87），但仓库没有任何 baseline 实现、脚本或指标文件，数字无来源"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "MO3-1",
+      "MO3-2",
+      "MO3-3",
+      "MO3-4"
+    ]
+  }
+}

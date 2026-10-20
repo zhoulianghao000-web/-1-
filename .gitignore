@@ -1,0 +1,6 @@
+node_modules/
+.adversarial-review/
+*.tgz
+release/
+.DS_Store
+Thumbs.db

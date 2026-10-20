@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Churn Prediction - Experiment Report</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0; background: #f5f6f8; color: #1f2330; font: 15px/1.55 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
+  header { background: #1d2a3a; color: #f5f6f8; padding: 34px 48px 28px; }
+  header .brand { text-transform: uppercase; letter-spacing: .1em; font-size: 12px; opacity: .7; }
+  header h1 { margin: 8px 0 6px; font-size: 30px; line-height: 1.2; }
+  header p { margin: 0; opacity: .8; }
+  main { max-width: 1180px; margin: 0 auto; padding: 30px 48px 46px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+  .card { background: #fff; border: 1px solid #dde1e8; border-radius: 12px; padding: 16px 18px; }
+  .card .label { font-size: 12px; color: #667085; text-transform: uppercase; letter-spacing: .06em; }
+  .card .value { margin-top: 4px; font-size: 30px; font-weight: 700; }
+  h2 { margin: 34px 0 12px; font-size: 20px; border-bottom: 2px solid #d7dce4; padding-bottom: 6px; }
+  h2:first-of-type { margin-top: 0; }
+  .panel { background: #fff; border: 1px solid #dde1e8; border-radius: 12px; padding: 18px 20px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid #eceef2; }
+  th { color: #475467; font-weight: 600; }
+  td.num { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  figure { margin: 0; background: #fff; border: 1px solid #dde1e8; border-radius: 12px; padding: 14px; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 6px; }
+  figcaption { margin-top: 8px; color: #667085; font-size: 12.5px; }
+  code { background: #eef1f5; border-radius: 5px; padding: 1px 6px; font-family: "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+  .note { color: #667085; font-size: 13px; }
+  footer { color: #667085; font-size: 12.5px; border-top: 1px solid #dde1e8; margin-top: 34px; padding-top: 14px; }
+  @media (max-width: 760px) {
+    header { padding: 24px 20px; }
+    main { padding: 22px 20px 34px; }
+    .split { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Experiment Report - Offline Artifact</div>
+  <h1>Customer Churn Prediction</h1>
+  <p>Regularized logistic regression on a synthetic, time-ordered churn dataset.</p>
+</header>
+<main>
+  <h2>Test-split metrics</h2>
+  <div class="cards">
+    <div class="card"><div class="label">Accuracy</div><div class="value">0.8500</div></div>
+    <div class="card"><div class="label">Precision</div><div class="value">0.8511</div></div>
+    <div class="card"><div class="label">Recall</div><div class="value">0.8333</div></div>
+    <div class="card"><div class="label">F1 score</div><div class="value">0.8421</div></div>
+  </div>
+
+  <h2>Metrics table</h2>
+  <div class="split">
+    <div class="panel">
+      <table>
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody>
+<tr><th>Accuracy</th><td class="num">0.8500</td></tr>
+<tr><th>Precision</th><td class="num">0.8511</td></tr>
+<tr><th>Recall</th><td class="num">0.8333</td></tr>
+<tr><th>F1 score</th><td class="num">0.8421</td></tr>
+        </tbody>
+      </table>
+      <p class="note">Source: metrics.json</p>
+    </div>
+    <div class="panel">
+      <table>
+        <thead><tr><th>Confusion</th><th>Predicted 0</th><th>Predicted 1</th></tr></thead>
+        <tbody>
+          <tr><th>Actual 0</th><td class="num">45</td><td class="num">7</td></tr>
+          <tr><th>Actual 1</th><td class="num">8</td><td class="num">40</td></tr>
+        </tbody>
+      </table>
+      <p class="note">Test rows: 100</p>
+    </div>
+  </div>
+
+  <h2>Figures</h2>
+  <div class="split">
+    <figure>
+      <img src="figures/metrics-chart.png" alt="Reported model metrics chart">
+      <figcaption>Figure 1. Reported model metrics.</figcaption>
+    </figure>
+    <figure>
+      <img src="figures/confusion.png" alt="Confusion matrix on the test split">
+      <figcaption>Figure 2. Confusion matrix on the test split (metrics.json).</figcaption>
+    </figure>
+  </div>
+
+  <h2>Run configuration</h2>
+  <div class="panel">
+    <table>
+      <tr><th>Dataset</th><td>data.csv (400 rows, time ordered)</td></tr>
+      <tr><th>Train / test rows</th><td>300 / 100</td></tr>
+      <tr><th>Split</th><td>75% / 25% random shuffle</td></tr>
+      <tr><th>Features</th><td><code>f1, f2, f3, row_id</code></td></tr>
+      <tr><th>Model</th><td>L2-regularized logistic regression (batch gradient descent)</td></tr>
+      <tr><th>Random seed</th><td>not fixed</td></tr>
+    </table>
+  </div>
+
+  <h2>Reproduction</h2>
+  <div class="panel">
+    <p>Train, evaluate and write metrics.json:</p>
+    <p><code>python run_experiment.py</code></p>
+    <p>Regenerate this report and the figures:</p>
+    <p><code>python make_report.py</code> &middot; <code>python make_figures.py</code></p>
+    <p class="note">The project uses the Python standard library only; no network access is required.</p>
+  </div>
+
+  <footer>Churn prediction experiment report. Figures are local PNG files; no external resources.</footer>
+</main>
+</body>
+</html>

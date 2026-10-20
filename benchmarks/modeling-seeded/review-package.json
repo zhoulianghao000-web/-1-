@@ -1,0 +1,92 @@
+{
+  "fixture": "modeling-seeded",
+  "title": "建模基准靶子：客户流失预测 v0.3（8 个种子缺陷）",
+  "target": ".",
+  "notes": "v1.2 建模阶段：evidence[] 是 4 张证据卡（image / pdf-text / screenshot / image，供 Stage C 证据框架渲染）；shots[] 保留为当前工具的 4 张静态截图 fallback（report.html 四个视口）。行号与 4 张卡片路径均已核对。",
+  "profile": "modeling",
+  "claims": [
+    "README 与论文都声称测试集 accuracy 达到 0.95（precision 0.94 / recall 0.96 / F1 0.95），且 metrics.json 复现同一数字",
+    "论文声称模型比未正则化 logistic-regression baseline 高 8.0 个 accuracy 点，且该提升统计显著（p < 0.05）",
+    "项目声称按 README 命令 python run_experiment.py 重跑可复现相同指标（结果确定）",
+    "论文声称 75/25 随机打乱划分足以评估该时间有序数据的未来外推性能（未来样本与训练同分布）",
+    "figures/metrics-chart.png、report.html 与 metrics.json 展示的指标数字一致"
+  ],
+  "focus": [
+    "数据泄漏（标准化/特征选择在划分前用全量数据）",
+    "时序泄漏（时间有序数据的随机打乱划分）",
+    "可复现性（随机种子缺失、两次运行不一致）",
+    "指标与宣称一致性（accuracy 0.95 vs metrics.json 实测）",
+    "基线/SOTA 与统计显著性（无 baseline、无检验/CI）",
+    "图表与表格数字一致性（PNG 硬编码 vs metrics.json）",
+    "特征 ID 泄漏（row_id 作为特征）",
+    "论文与代码/指标一致性"
+  ],
+  "outOfScope": "模型创新性与调参质量、超参搜索、写作/排版风格、训练成本与能耗不在本轮范围；纯风格偏好不作为缺陷",
+  "environment": "只读文件浏览 + review_probe（含 run-metrics：在只读临时副本中按 modeling-run.json 执行命令并对比 metricsFile）；无网络、无浏览器控制；Python 3.14 标准库可用",
+  "timeBudget": "约 15–20 分钟",
+  "evidence": [
+    {
+      "kind": "image",
+      "path": "figures/metrics-chart.png",
+      "name": "metrics-chart"
+    },
+    {
+      "kind": "pdf-text",
+      "path": "paper.pdf",
+      "page": 1,
+      "name": "paper"
+    },
+    {
+      "kind": "screenshot",
+      "path": "report.html",
+      "width": 1440,
+      "height": 1000,
+      "name": "report"
+    },
+    {
+      "kind": "image",
+      "path": "figures/confusion.png",
+      "name": "confusion"
+    }
+  ],
+  "shots": [
+    {
+      "path": "report.html",
+      "width": 1440,
+      "height": 900,
+      "name": "desktop"
+    },
+    {
+      "path": "report.html",
+      "width": 1280,
+      "height": 800,
+      "name": "laptop"
+    },
+    {
+      "path": "report.html",
+      "width": 768,
+      "height": 1024,
+      "name": "tablet"
+    },
+    {
+      "path": "report.html",
+      "width": 390,
+      "height": 844,
+      "name": "mobile"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "M1",
+      "M2",
+      "M3",
+      "M4",
+      "M5",
+      "M6",
+      "M7",
+      "M8"
+    ]
+  }
+}

@@ -1,0 +1,107 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 3766 >>
+stream
+BT /F2 17.0 Tf 1 0 0 1 72.00 703.00 Tm (Churn Prediction with Correlation-Selected Logistic Regression) Tj ET
+BT /F2 12.0 Tf 1 0 0 1 72.00 662.35 Tm (Abstract) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 644.85 Tm (Customer churn prediction is a core retention task for subscription) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 629.35 Tm (businesses. We study a small synthetic churn dataset and propose a) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 613.85 Tm (correlation-based feature-selection pipeline followed by L2-regularized) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 598.35 Tm (logistic regression. On a held-out 25% test split the model reaches an) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 582.85 Tm (accuracy of 0.95, a precision of 0.94, a recall of 0.96 and an F1 score of) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 567.35 Tm (0.95. It outperforms a standard logistic-regression baseline by 8.0 accuracy) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 551.85 Tm (points, a statistically significant improvement \(p < 0.05\). The pipeline is) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 536.35 Tm (simple, offline and fully reproducible.) Tj ET
+BT /F2 12.0 Tf 1 0 0 1 72.00 503.85 Tm (1. Introduction) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 486.35 Tm (Churn models are only useful when their reported performance generalizes to) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 470.85 Tm (future customers. Most small studies report a single random train/test split,) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 455.35 Tm (which can be optimistic when the data has a temporal order. We therefore) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 439.85 Tm (evaluate a regularized logistic-regression model on a synthetic dataset with a) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 424.35 Tm (time-ordered collection process and report the standard classification) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 408.85 Tm (metrics. Our goal is a transparent baseline for later work rather than a novel) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 393.35 Tm (model.) Tj ET
+BT /F2 12.0 Tf 1 0 0 1 72.00 360.85 Tm (2. Data) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 343.35 Tm (The dataset is synthetic and contains 400 customer records collected over) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 327.85 Tm (roughly 13 months \(one record per day\). Each record has an identifier, a) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 312.35 Tm (timestamp, five numeric features \(f1-f5\) and a binary churn label. Features) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 296.85 Tm (f1-f4 carry signal while f5 is noise. The churn rate drifts over time so that) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 281.35 Tm (later records are more likely to churn. Because the rows are ordered by) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 265.85 Tm (collection date, the split strategy strongly influences the reported metric.) Tj ET
+BT /F2 12.0 Tf 1 0 0 1 72.00 233.35 Tm (3. Method) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 215.85 Tm (We rank the numeric columns by the absolute Pearson correlation with the label) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 200.35 Tm (and keep the top four. The selected columns are standardized with their mean) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 184.85 Tm (and standard deviation, and a regularized logistic-regression classifier is) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 169.35 Tm (fitted with batch gradient descent for 500 epochs. The optimization objective) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 153.85 Tm (adds an L2 penalty \(lambda = 0.001\) to the weights. The data is shuffled and) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 138.35 Tm (split into 75% training and 25% test rows. All code is pure Python standard) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 122.85 Tm (library.) Tj ET
+BT /F2 12.0 Tf 1 0 0 1 72.00 90.35 Tm (4. Results) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 72.85 Tm (Table 1 summarizes the performance of the model on the test split.) Tj ET
+
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2027 >>
+stream
+BT /F1 9.0 Tf 1 0 0 1 96.00 711.00 Tm (Metric   Value) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 96.00 699.50 Tm (Accuracy   0.95) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 96.00 688.00 Tm (Precision   0.94) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 96.00 676.50 Tm (Recall   0.96) Tj ET
+BT /F1 9.0 Tf 1 0 0 1 96.00 665.00 Tm (F1   0.95) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 647.50 Tm (The regularized model outperforms the unregularized logistic-regression) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 632.00 Tm (baseline by 8.0 accuracy points, whose accuracy is 0.87. A paired bootstrap) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 616.50 Tm (test over the test predictions yields p < 0.05, so the improvement over the) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 601.00 Tm (baseline is statistically significant. No confidence intervals are reported) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 585.50 Tm (because the single split already establishes the effect.) Tj ET
+BT /F2 12.0 Tf 1 0 0 1 72.00 553.00 Tm (5. Reproducibility) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 535.50 Tm (The experiment has no third-party dependencies. Running) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 520.00 Tm (`python run_experiment.py` trains the model, evaluates it on the test split and) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 504.50 Tm (writes metrics.json. Because the pipeline is fully deterministic, rerunning the) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 489.00 Tm (command reproduces Table 1 exactly. The figures in figures/ are generated from) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 473.50 Tm (the reported metrics.) Tj ET
+BT /F2 12.0 Tf 1 0 0 1 72.00 441.00 Tm (6. Conclusion) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 423.50 Tm (A correlation-selected regularized logistic-regression pipeline reaches an) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 408.00 Tm (accuracy of 0.95 on a small synthetic churn dataset and clearly beats the) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 392.50 Tm (baseline. Future work should validate the result on real customer data and) Tj ET
+BT /F1 10.0 Tf 1 0 0 1 72.00 377.00 Tm (study temporal validation more carefully.) Tj ET
+
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000218 00000 n 
+0000000320 00000 n 
+0000000425 00000 n 
+0000000571 00000 n 
+0000004389 00000 n 
+0000004535 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+6614
+%%EOF

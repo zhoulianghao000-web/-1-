@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "generatedAt": 1792328127999,
+  "fixtures": {
+    "corpus/web-landing": {
+      "score": 45,
+      "gatePassed": false,
+      "recall": 1,
+      "precision": 0.8
+    },
+    "game-seeded": {
+      "score": 60,
+      "gatePassed": false,
+      "recall": 1,
+      "precision": 1
+    },
+    "injection-web": {
+      "score": 40,
+      "gatePassed": false,
+      "recall": 1,
+      "precision": 0.8
+    },
+    "known-bugs-web": {
+      "score": 55,
+      "gatePassed": false,
+      "recall": 1,
+      "precision": 1
+    },
+    "modeling-seeded": {
+      "score": 39,
+      "gatePassed": false,
+      "recall": 1,
+      "precision": 1
+    }
+  }
+}

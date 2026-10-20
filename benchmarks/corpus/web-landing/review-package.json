@@ -1,0 +1,58 @@
+{
+  "fixture": "web-landing",
+  "title": "星轨笔记 · 落地页（v2.0 校准语料）",
+  "target": ".",
+  "notes": "由 benchmarks/corpus/generate.mjs 自动生成；4 个既有 fixture + 16 个合成语料共 20 个项目。合成语料含故意注入的种子缺陷，不要用手工修改生成文件（--check 会失败）。",
+  "claims": [
+    "前端不包含任何密钥或第三方凭据（API key 只应存在于服务端）",
+    "所有按钮交互均正常，浏览器控制台没有任何未捕获错误",
+    "页面资源完整，所有图片均可正常加载"
+  ],
+  "focus": [
+    "前端密钥",
+    "未捕获的 JS 错误",
+    "资源完整性（坏图）",
+    "表单/链接行为",
+    "可访问性（alt / aria-live）",
+    "移动端布局溢出",
+    "README 宣称与实现一致性"
+  ],
+  "outOfScope": "视觉设计偏好、文案风格、功能丰富度不在本轮范围；纯主观审美不作为缺陷",
+  "environment": "只读文件浏览 + review_probe；无浏览器控制（静态站点由 Host 按 4 个视口截图）",
+  "timeBudget": "约 10–15 分钟",
+  "shots": [
+    {
+      "path": "index.html",
+      "width": 1440,
+      "height": 900,
+      "name": "desktop"
+    },
+    {
+      "path": "index.html",
+      "width": 1280,
+      "height": 800,
+      "name": "laptop"
+    },
+    {
+      "path": "index.html",
+      "width": 768,
+      "height": 1024,
+      "name": "tablet"
+    },
+    {
+      "path": "index.html",
+      "width": 390,
+      "height": 844,
+      "name": "mobile"
+    }
+  ],
+  "expectations": {
+    "gatePassed": false,
+    "minimumRecall": 0.8,
+    "expectedLabels": [
+      "W1-1",
+      "W1-2",
+      "W1-3"
+    ]
+  }
+}
